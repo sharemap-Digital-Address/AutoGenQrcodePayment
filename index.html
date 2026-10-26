@@ -122,7 +122,7 @@
 <body>
 
 <div class="app-container">
-    <h2>QRPh Tool (Reverse & Generate)</h2>
+    <h2>QRPh Tools (Reverse & Generate)</h2>
     
     <div id="hidden-reader"></div>
 
@@ -144,7 +144,7 @@
         <input type="text" id="part1Input" placeholder="Naka-abang sa pagbasa...">
         
         <label>Halaga / Amount (Maaaring palitan):</label>
-        <input type="number" id="amountInput" placeholder="Naka-abang sa pagbasa..." step="any">
+        <input type="number" id="amountInput" placeholder="Ilagay ang bagong halaga (Opsyonal)..." step="any">
         
         <label>Part 2 (Suffix/Location Data):</label>
         <input type="text" id="part2Input" placeholder="Naka-abang sa pagbasa...">
@@ -195,14 +195,14 @@
             });
     });
 
-    // Tumpak na EMVCo TLV Parser para mahati ang Part 1, Amount, at Part 2
+    // Pinagbuting Parser na kaya ring humati kahit Static QR (walang Tag 54)
     function parseAndSplitQR(rawText) {
         let index = 0;
         let tag54Start = -1;
         let tag54End = -1;
         let tag53Start = -1;
+        let tag58Start = -1;
 
-        // I-scan ang string ayon sa EMVCo structure (Tag + Length + Value) hanggang bago ang CRC (huling 4 characters)
         while (index < rawText.length - 4) {
             let tag = rawText.substring(index, index + 2);
             let lenStr = rawText.substring(index + 2, index + 4);
@@ -218,13 +218,15 @@
                 tag54Start = index;
                 tag54End = valueEnd;
                 break;
+            } else if (tag === "58") {
+                tag58Start = index;
             }
             
             index = valueEnd;
         }
 
         if (tag54Start !== -1) {
-            // Kung may Tag 53 (Currency) bago ang Tag 54, isama ito sa paghati katulad ng iyong Python script
+            // Kung Dynamic QR na may kasamang amount
             let splitIndex = (tag53Start !== -1 && tag53Start === tag54Start - 7) ? tag53Start : tag54Start;
             
             const part1 = rawText.substring(0, splitIndex);
@@ -235,11 +237,23 @@
             document.getElementById('amountInput').value = parseFloat(amountVal);
             document.getElementById('part2Input').value = part2;
         } else {
-            // Static QR na walang nakatakdang halaga / amount
-            const part1 = rawText.substring(0, rawText.length - 4);
+            // Kung Static QR (walang Tag 54), hatiin gamit ang Tag 53 (Currency) o Tag 58 (Country)
+            let splitIdx = -1;
+            if (tag53Start !== -1) {
+                splitIdx = tag53Start;
+            } else if (tag58Start !== -1) {
+                splitIdx = tag58Start;
+            } else {
+                splitIdx = rawText.indexOf("5802PH");
+                if (splitIdx === -1) splitIdx = rawText.length - 30;
+            }
+
+            const part1 = rawText.substring(0, splitIdx);
+            const part2 = rawText.substring(splitIdx, rawText.length - 4);
+
             document.getElementById('part1Input').value = part1;
-            document.getElementById('amountInput').value = "";
-            document.getElementById('part2Input').value = "";
+            document.getElementById('amountInput').value = ""; // Blangko para ikaw maglagay ng gusto mong halaga
+            document.getElementById('part2Input').value = part2;
         }
     }
 
