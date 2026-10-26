@@ -1,0 +1,2 @@
+# AutoGenQrcodePayment
+autogen 
