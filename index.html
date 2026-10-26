@@ -114,7 +114,6 @@
             padding: 10px;
             border: 1px solid #ddd;
         }
-        /* Hidden div lang para kailangan ng library scanner */
         #hidden-reader {
             display: none;
         }
@@ -123,25 +122,22 @@
 <body>
 
 <div class="app-container">
-    <h2>QRPh Tools (Reverse & Generate)</h2>
+    <h2>QRPh Tool (Reverse & Generate)</h2>
     
-    <!-- Dummy element na kailangan ng Html5Qrcode library -->
     <div id="hidden-reader"></div>
 
-    <!-- STEP 1: UPLOAD & BUTTON TO REVERSE -->
+    <!-- STEP 1: UPLOAD & BUTTON -->
     <div class="section">
         <div class="section-title">1) Pumili ng QR Image</div>
         <input type="file" id="qrUpload" accept="image/*">
-        
-        <!-- Button na lilitaw pagkapili ng file -->
         <button id="btnScanNow" class="btn-orange" type="button" style="display: none;">
             Basahin at I-reverse ang QR Code
         </button>
     </div>
 
-    <!-- STEP 2: AUTO FILL SECTIONS -->
+    <!-- STEP 2: SECTIONS -->
     <div class="section">
-        <div class="section-title">2) Hati-hating Bahagi ng QR String</div>
+        <div class="section-title">2) Mga Bahagi ng QR String</div>
         
         <label>Part 1 (Base/Account Data):</label>
         <input type="text" id="part1Input" placeholder="Naka-abang sa pagbasa...">
@@ -153,11 +149,11 @@
         <input type="text" id="part2Input" placeholder="Naka-abang sa pagbasa...">
     </div>
 
-    <!-- STEP 3: DECODE ACCOUNT INFO BUTTON -->
+    <!-- STEP 3: DECODE -->
     <button id="btnDecode" class="btn-blue" type="button">I-decode ang Impormasyon ng Account</button>
     <div id="accountInfoOutput" class="result-box" style="display: none;"></div>
 
-    <!-- STEP 4: GENERATE NEW QR BUTTON -->
+    <!-- STEP 4: GENERATE -->
     <button id="btnGenerate" class="btn-green" type="button">Generate Receive Money via QR</button>
     
     <div class="qr-output-container">
@@ -168,11 +164,10 @@
 <script>
     let selectedFile = null;
 
-    // Kapag pumili ng file ang user
     document.getElementById('qrUpload').addEventListener('change', function(e) {
         const files = e.target.files;
         if (files && files.length > 0) {
-            selectedFile = files[0]; // Kuhanin ang mismong File object
+            selectedFile = files[0];
             document.getElementById('btnScanNow').style.display = 'block';
         } else {
             selectedFile = null;
@@ -180,7 +175,6 @@
         }
     });
 
-    // Pagpindot sa orange button para basahin at i-reverse ang QR
     document.getElementById('btnScanNow').addEventListener('click', function() {
         if (!selectedFile) {
             alert("Mangyaring pumili muna ng larawan.");
@@ -188,8 +182,6 @@
         }
 
         const html5QrCode = new Html5Qrcode("hidden-reader");
-
-        // Gamitin ang scanFile ng Html5Qrcode
         html5QrCode.scanFile(selectedFile, true)
             .then(qrCodeText => {
                 parseAndSplitQR(qrCodeText);
@@ -201,38 +193,45 @@
             });
     });
 
-    // Paghati-hati sa QR String (Reverse Process para sa EMVCo / QRPh format)
+    // Pagsunod sa eksaktong Python logic para sa pag-parse ng QRPh string
     function parseAndSplitQR(rawText) {
-        const tag54Index = rawText.indexOf("54");
+        // Tanggalin ang huling 4 characters (CRC checksum)
+        const payloadWithoutCRC = rawText.substring(0, rawText.length - 4);
         
-        if (tag54Index !== -1) {
-            const lengthIndicator = rawText.substring(tag54Index + 2, tag54Index + 4);
-            const amountLength = parseInt(lengthIndicator, 10);
+        const tag53Index = payloadWithoutCRC.indexOf("5303608");
+        const tag54Index = payloadWithoutCRC.indexOf("54");
+        
+        if (tag53Index !== -1 && tag54Index !== -1) {
+            const part1 = payloadWithoutCRC.substring(0, tag53Index);
             
-            if (!isNaN(amountLength)) {
-                const amountValue = rawText.substring(tag54Index + 4, tag54Index + 4 + amountLength);
-                const part1 = rawText.substring(0, tag54Index);
-                const part2 = rawText.substring(tag54Index + 4 + amountLength, rawText.length - 4);
-                
-                document.getElementById('part1Input').value = part1;
-                document.getElementById('amountInput').value = parseFloat(amountValue);
-                document.getElementById('part2Input').value = part2;
-                return;
-            }
+            const lengthIndicator = payloadWithoutCRC.substring(tag54Index + 2, tag54Index + 4);
+            const amountLength = parseInt(lengthIndicator, 10);
+            const amountValue = payloadWithoutCRC.substring(tag54Index + 4, tag54Index + 4 + amountLength);
+            
+            // Part 2: Mula pagkatapos ng amount hanggang dulo
+            const part2 = payloadWithoutCRC.substring(tag54Index + 4 + amountLength);
+            
+            document.getElementById('part1Input').value = part1;
+            document.getElementById('amountInput').value = parseFloat(amountValue);
+            document.getElementById('part2Input').value = part2;
+        } else {
+            const part1 = payloadWithoutCRC;
+            document.getElementById('part1Input').value = part1;
+            document.getElementById('amountInput').value = "";
+            document.getElementById('part2Input').value = "";
         }
-
-        // Kung walang amount tag (Tag 54) o static QR
-        const part1 = rawText.substring(0, rawText.length - 4);
-        document.getElementById('part1Input').value = part1;
-        document.getElementById('amountInput').value = "";
-        document.getElementById('part2Input').value = "";
     }
 
-    // Decode Account Info (Tag 59 - Merchant/Account Name)
     document.getElementById('btnDecode').addEventListener('click', function() {
         const part1 = document.getElementById('part1Input').value;
+        const amount = parseFloat(document.getElementById('amountInput').value) || 0;
+        const amountStr = amount > 0 ? amount.toFixed(2) : "";
+        const lengthStr = amountStr.length.toString().padStart(2, '0');
+        
+        // Buuin pansamantala ang buong string para ma-decode ang Tag 59 (Pangalan)
+        const amountPart = amount > 0 ? "530360854" + lengthStr + amountStr : "";
         const part2 = document.getElementById('part2Input').value;
-        const fullString = part1 + part2;
+        const fullString = part1 + amountPart + part2;
 
         if(!fullString) {
             alert("Walang QR data na babasahin. Mangyaring mag-reverse muna ng larawan.");
@@ -253,7 +252,6 @@
         outputDiv.innerHTML = `<strong>Pangalan ng Account:</strong> ${name}\n<strong>Network/Routing:</strong> InstaPay (QRPh)\n<strong>Status:</strong> Handa nang gawan ng bagong presyo.`;
     });
 
-    // CRC16 Checksum Calculator (CCITT-FALSE)
     function computeCRC16(str) {
         let crc = 0xFFFF;
         for (let c = 0; c < str.length; c++) {
@@ -271,7 +269,7 @@
         return hex.padStart(4, '0');
     }
 
-    // Generate New QR
+    // Pag-generate ng bagong QR gamit ang eksaktong Python approach
     document.getElementById('btnGenerate').addEventListener('click', function() {
         const part1 = document.getElementById('part1Input').value;
         const part2 = document.getElementById('part2Input').value;
@@ -283,13 +281,13 @@
         }
 
         let newPayload = "";
-
         if (isNaN(amount) || amount <= 0) {
             newPayload = part1 + part2 + "6304";
         } else {
             const amountStr = amount.toFixed(2);
             const lengthStr = amountStr.length.toString().padStart(2, '0');
-            newPayload = part1 + "54" + lengthStr + amountStr + part2 + "6304";
+            // Katulad ng Python code mo: part1 + currency_and_amount + part2
+            newPayload = part1 + "530360854" + lengthStr + amountStr + part2 + "6304";
         }
 
         const finalChecksum = computeCRC16(newPayload);
