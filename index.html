@@ -3,9 +3,9 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>GCash/QRPh Reverse & Generator Tool</title>
-    <!-- Mga kailangang library para sa QR scanning at pag-generate -->
-    <script src="https://jsdelivr.net"></script>
+    <title>GCash/QRPh Tool (Fix Scanner)</title>
+    <!-- Mas matatag na QR Scanner Library para sa mga Cellphone -->
+    <script src="https://unpkg.com"></script>
     <script src="https://cloudflare.com"></script>
     <style>
         body {
@@ -136,63 +136,41 @@
 </div>
 
 <script>
-    // Variable para itabi ang orihinal na format ng tag 54 (Length indicator)
-    let originalAmountLength = "05"; 
+    // Inisyal na pag-setup ng bagong scanner library
+    const html5QrCodeScanner = new Html5Qrcode("qrUpload");
 
-    // Pagbasa sa in-upload na Larawan
     document.getElementById('qrUpload').addEventListener('change', function(e) {
         const file = e.target.files[0];
         if (!file) return;
 
-        const reader = new FileReader();
-        reader.onload = function(event) {
-            const img = new Image();
-            img.onload = function() {
-                // Gumawa ng pansamantalang canvas para makuha ang image data pixel
-                const canvas = document.createElement('canvas');
-                const ctx = canvas.getContext('2d');
-                canvas.width = img.width;
-                canvas.height = img.height;
-                ctx.drawImage(img, 0, 0, img.width, img.height);
-                
-                const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-                const code = jsQR(imageData.data, imageData.width, imageData.height);
-                
-                if (code) {
-                    parseAndSplitQR(code.data);
-                } else {
-                    alert("Hindi mabasa ang QR code sa larawan. Siguraduhing malinaw ito.");
-                }
-            };
-            img.src = event.target.result;
-        };
-        reader.readAsDataURL(file);
+        // Gamitin ang file scanning feature ng html5-qrcode para malpasan ang CORS block
+        Html5Qrcode.scanImage(file, { qrBox: 250 })
+            .then(qrCodeText => {
+                // Kapag matagumpay na nabasa ang QR string
+                parseAndSplitQR(qrCodeText);
+            })
+            .catch(err => {
+                alert("Hindi ma-scan ang QR sa larawan. Siguraduhing malinaw ang QR code o subukan ang ibang screenshot.");
+                console.error(err);
+            });
     });
 
     // Paghati-hati sa QR String (Reverse Process)
     function parseAndSplitQR(rawText) {
-        // Hanapin ang lokasyon ng tag 54 na naglalaman ng Amount
         const tag54Index = rawText.indexOf("54");
         
         if (tag54Index !== -1) {
-            // Kunin ang haba ng amount string (ang kasunod na 2 numero pagkatapos ng 54)
             const lengthIndicator = rawText.substring(tag54Index + 2, tag54Index + 4);
-            originalAmountLength = lengthIndicator;
             const amountLength = parseInt(lengthIndicator, 10);
-            
-            // Kunin ang aktwal na amount string value
             const amountValue = rawText.substring(tag54Index + 4, tag54Index + 4 + amountLength);
             
-            // Hatiin ang string sa Part 1 at Part 2 (tatanggalin din ang huling 4-character checksum)
             const part1 = rawText.substring(0, tag54Index);
             const part2 = rawText.substring(tag54Index + 4 + amountLength, rawText.length - 4);
             
-            // I-autofill sa mga inputs/EditText
             document.getElementById('part1Input').value = part1;
             document.getElementById('amountInput').value = parseFloat(amountValue);
             document.getElementById('part2Input').value = part2;
         } else {
-            // Kung walang itinakdang presyo (Open Amount)
             const part1 = rawText.substring(0, rawText.length - 4);
             document.getElementById('part1Input').value = part1;
             document.getElementById('amountInput').value = "";
@@ -211,25 +189,19 @@
             return;
         }
 
-        // Simpleng text-matching para makuha ang Pangalan (Tag 59)
         let name = "Hindi mahanap";
         const tag59Index = fullString.indexOf("59");
         if (tag59Index !== -1) {
             const len = parseInt(fullString.substring(tag59Index + 2, tag59Index + 4), 10);
             name = fullString.substring(tag59Index + 4, tag59Index + 4 + len);
         }
-
-        // Paghanap sa posibleng User ID / Account Number sa loob ng merchant data
-        let accountId = "Naka-mask o nakatago";
-        const gcashPattern = /GXCHPHM[A-Z0-9xX]+(04\d+)?/;
-        const match = fullString.match(gcashPattern);
         
         const outputDiv = document.getElementById('accountInfoOutput');
         outputDiv.style.display = "block";
         outputDiv.innerHTML = `<strong>Pangalan ng Account:</strong> ${name}\n<strong>Network/Routing:</strong> InstaPay (QRPh)\n<strong>Status:</strong> Handa nang gawan ng bagong presyo.`;
     });
 
-    // Helper function para sa CRC16-CCITT Checksum
+    // Helper function para sa CRC16-CCITT Checksum (CCITT-FALSE)
     function computeCRC16(str) {
         let crc = 0xFFFF;
         for (let c = 0; c < str.length; c++) {
@@ -261,7 +233,27 @@
         let newPayload = "";
 
         if (isNaN(amount) || amount <= 0) {
-            // Kung walang nakasulat na halaga, gagawin itong Open Amount
             newPayload = part1 + part2 + "6304";
         } else {
-            // I-format ang bagong presyo (2 decimal places)
+            const amountStr = amount.toFixed(2);
+            const lengthStr = amountStr.length.toString().padStart(2, '0');
+            newPayload = part1 + "54" + lengthStr + amountStr + part2 + "6304";
+        }
+
+        const finalChecksum = computeCRC16(newPayload.substring(0, newPayload.length - 4) + "6304");
+        const completeQRString = newPayload + finalChecksum;
+
+        document.getElementById("qrcode").innerHTML = "";
+        new QRCode(document.getElementById("qrcode"), {
+            text: completeQRString,
+            width: 200,
+            height: 200,
+            colorDark : "#000000",
+            colorLight : "#ffffff",
+            correctLevel : QRCode.CorrectLevel.M
+        });
+    });
+</script>
+
+</body>
+</html>
