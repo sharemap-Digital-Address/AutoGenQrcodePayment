@@ -269,3 +269,18 @@
             newPayload = part1 + part2 + "6304";
         } else {
             const amountStr = amount.toFixed(2);
+const lengthStr = amountStr.length.toString().padStart(2, '0');
+newPayload = part1 + "54" + lengthStr + amountStr + part2 + "6304";
+}
+const finalChecksum = computeCRC16(newPayload.substring(0, newPayload.length - 4) + "6304");
+const completeQRString = newPayload + finalChecksum;
+document.getElementById("qrcode").innerHTML = "";
+new QRCode(document.getElementById("qrcode"), {
+text: completeQRString,
+width: 200,
+height: 200,
+colorDark : "#000000",
+colorLight : "#ffffff",
+correctLevel : QRCode.CorrectLevel.M
+});
+});
