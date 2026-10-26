@@ -1,0 +1,267 @@
+<!DOCTYPE html>
+<html lang="tl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GCash/QRPh Reverse & Generator Tool</title>
+    <!-- Mga kailangang library para sa QR scanning at pag-generate -->
+    <script src="https://jsdelivr.net"></script>
+    <script src="https://cloudflare.com"></script>
+    <style>
+        body {
+            font-family: 'Segoe UI', Arial, sans-serif;
+            background-color: #0052cc;
+            margin: 0;
+            padding: 20px;
+            display: flex;
+            justify-content: center;
+        }
+        .app-container {
+            background-color: #ffffff;
+            max-width: 500px;
+            width: 100%;
+            padding: 25px;
+            border-radius: 16px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+            box-sizing: border-box;
+        }
+        h2 {
+            color: #0052cc;
+            text-align: center;
+            margin-top: 0;
+        }
+        .section {
+            border: 1px solid #e0e0e0;
+            padding: 15px;
+            border-radius: 10px;
+            margin-bottom: 20px;
+            background-color: #f9f9f9;
+        }
+        .section-title {
+            font-weight: bold;
+            color: #333;
+            margin-bottom: 10px;
+            font-size: 14px;
+            text-transform: uppercase;
+        }
+        label {
+            font-size: 12px;
+            font-weight: bold;
+            color: #555;
+            display: block;
+            margin-top: 10px;
+        }
+        input[type="text"], input[type="number"], input[type="file"] {
+            width: 100%;
+            padding: 10px;
+            margin-top: 5px;
+            border: 1px solid #ccc;
+            border-radius: 6px;
+            box-sizing: border-box;
+            font-size: 14px;
+        }
+        button {
+            width: 100%;
+            background-color: #0052cc;
+            color: white;
+            border: none;
+            padding: 12px;
+            font-size: 15px;
+            font-weight: bold;
+            border-radius: 6px;
+            cursor: pointer;
+            margin-top: 15px;
+            transition: background 0.2s;
+        }
+        button:hover {
+            background-color: #003d99;
+        }
+        .result-box {
+            background-color: #e6f0ff;
+            padding: 10px;
+            border-radius: 6px;
+            margin-top: 10px;
+            font-size: 13px;
+            color: #003d99;
+            text-align: left;
+            white-space: pre-line;
+        }
+        .qr-output-container {
+            text-align: center;
+            margin-top: 20px;
+        }
+        #qrcode {
+            display: inline-block;
+            background: white;
+            padding: 10px;
+            border: 1px solid #ddd;
+        }
+    </style>
+</head>
+<body>
+
+<div class="app-container">
+    <h2>QRPh Tool (Reverse & Generate)</h2>
+    
+    <!-- STEP 1: UPLOAD & REVERSE -->
+    <div class="section">
+        <div class="section-title">1) I-upload ang QR Image</div>
+        <input type="file" id="qrUpload" accept="image/*">
+    </div>
+
+    <!-- STEP 2: AUTO FILL SECTIONS -->
+    <div class="section">
+        <div class="section-title">2) Hati-hating Bahagi ng QR String</div>
+        
+        <label>Part 1 (Base/Account Data):</label>
+        <input type="text" id="part1Input" placeholder="Awtomatikong mapupunan">
+        
+        <label>Halaga / Amount (Maaaring palitan):</label>
+        <input type="number" id="amountInput" placeholder="Awtomatikong mapupunan" step="any">
+        
+        <label>Part 2 (Suffix/Location Data):</label>
+        <input type="text" id="part2Input" placeholder="Awtomatikong mapupunan">
+    </div>
+
+    <!-- STEP 3: DECODE ACCOUNT INFO BUTTON -->
+    <button id="btnDecode" type="button">I-decode ang Impormasyon ng Account</button>
+    <div id="accountInfoOutput" class="result-box" style="display: none;"></div>
+
+    <!-- STEP 4: GENERATE NEW QR BUTTON -->
+    <button id="btnGenerate" type="button" style="background-color: #28a745;">Generate Receive Money via QR</button>
+    
+    <div class="qr-output-container">
+        <div id="qrcode"></div>
+    </div>
+</div>
+
+<script>
+    // Variable para itabi ang orihinal na format ng tag 54 (Length indicator)
+    let originalAmountLength = "05"; 
+
+    // Pagbasa sa in-upload na Larawan
+    document.getElementById('qrUpload').addEventListener('change', function(e) {
+        const file = e.target.files[0];
+        if (!file) return;
+
+        const reader = new FileReader();
+        reader.onload = function(event) {
+            const img = new Image();
+            img.onload = function() {
+                // Gumawa ng pansamantalang canvas para makuha ang image data pixel
+                const canvas = document.createElement('canvas');
+                const ctx = canvas.getContext('2d');
+                canvas.width = img.width;
+                canvas.height = img.height;
+                ctx.drawImage(img, 0, 0, img.width, img.height);
+                
+                const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+                const code = jsQR(imageData.data, imageData.width, imageData.height);
+                
+                if (code) {
+                    parseAndSplitQR(code.data);
+                } else {
+                    alert("Hindi mabasa ang QR code sa larawan. Siguraduhing malinaw ito.");
+                }
+            };
+            img.src = event.target.result;
+        };
+        reader.readAsDataURL(file);
+    });
+
+    // Paghati-hati sa QR String (Reverse Process)
+    function parseAndSplitQR(rawText) {
+        // Hanapin ang lokasyon ng tag 54 na naglalaman ng Amount
+        const tag54Index = rawText.indexOf("54");
+        
+        if (tag54Index !== -1) {
+            // Kunin ang haba ng amount string (ang kasunod na 2 numero pagkatapos ng 54)
+            const lengthIndicator = rawText.substring(tag54Index + 2, tag54Index + 4);
+            originalAmountLength = lengthIndicator;
+            const amountLength = parseInt(lengthIndicator, 10);
+            
+            // Kunin ang aktwal na amount string value
+            const amountValue = rawText.substring(tag54Index + 4, tag54Index + 4 + amountLength);
+            
+            // Hatiin ang string sa Part 1 at Part 2 (tatanggalin din ang huling 4-character checksum)
+            const part1 = rawText.substring(0, tag54Index);
+            const part2 = rawText.substring(tag54Index + 4 + amountLength, rawText.length - 4);
+            
+            // I-autofill sa mga inputs/EditText
+            document.getElementById('part1Input').value = part1;
+            document.getElementById('amountInput').value = parseFloat(amountValue);
+            document.getElementById('part2Input').value = part2;
+        } else {
+            // Kung walang itinakdang presyo (Open Amount)
+            const part1 = rawText.substring(0, rawText.length - 4);
+            document.getElementById('part1Input').value = part1;
+            document.getElementById('amountInput').value = "";
+            document.getElementById('part2Input').value = "";
+        }
+    }
+
+    // Button Click: I-decode ang Impormasyon ng Account
+    document.getElementById('btnDecode').addEventListener('click', function() {
+        const part1 = document.getElementById('part1Input').value;
+        const part2 = document.getElementById('part2Input').value;
+        const fullString = part1 + part2;
+
+        if(!fullString) {
+            alert("Mangyaring mag-upload muna ng QR code.");
+            return;
+        }
+
+        // Simpleng text-matching para makuha ang Pangalan (Tag 59)
+        let name = "Hindi mahanap";
+        const tag59Index = fullString.indexOf("59");
+        if (tag59Index !== -1) {
+            const len = parseInt(fullString.substring(tag59Index + 2, tag59Index + 4), 10);
+            name = fullString.substring(tag59Index + 4, tag59Index + 4 + len);
+        }
+
+        // Paghanap sa posibleng User ID / Account Number sa loob ng merchant data
+        let accountId = "Naka-mask o nakatago";
+        const gcashPattern = /GXCHPHM[A-Z0-9xX]+(04\d+)?/;
+        const match = fullString.match(gcashPattern);
+        
+        const outputDiv = document.getElementById('accountInfoOutput');
+        outputDiv.style.display = "block";
+        outputDiv.innerHTML = `<strong>Pangalan ng Account:</strong> ${name}\n<strong>Network/Routing:</strong> InstaPay (QRPh)\n<strong>Status:</strong> Handa nang gawan ng bagong presyo.`;
+    });
+
+    // Helper function para sa CRC16-CCITT Checksum
+    function computeCRC16(str) {
+        let crc = 0xFFFF;
+        for (let c = 0; c < str.length; c++) {
+            let code = str.charCodeAt(c);
+            crc ^= (code << 8);
+            for (let i = 0; i < 8; i++) {
+                if ((crc & 0x8000) !== 0) {
+                    crc = ((crc << 1) ^ 0x1021) & 0xFFFF;
+                } else {
+                    crc = (crc << 1) & 0xFFFF;
+                }
+            }
+        }
+        let hex = crc.toString(16).toUpperCase();
+        return hex.padStart(4, '0');
+    }
+
+    // Button Click: Generate Receive Money via QR
+    document.getElementById('btnGenerate').addEventListener('click', function() {
+        const part1 = document.getElementById('part1Input').value;
+        const part2 = document.getElementById('part2Input').value;
+        const amount = parseFloat(document.getElementById('amountInput').value);
+
+        if (!part1) {
+            alert("Walang sapat na data para mag-generate.");
+            return;
+        }
+
+        let newPayload = "";
+
+        if (isNaN(amount) || amount <= 0) {
+            // Kung walang nakasulat na halaga, gagawin itong Open Amount
+            newPayload = part1 + part2 + "6304";
+        } else {
+            // I-format ang bagong presyo (2 decimal places)
