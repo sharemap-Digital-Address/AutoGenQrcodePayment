@@ -122,7 +122,7 @@
 <body>
 
 <div class="app-container">
-    <h2>QRPh Tool (Reverse & Generate)</h2>
+    <h2>QRPh Tools (Reverse & Generate)</h2>
     
     <div id="hidden-reader"></div>
 
@@ -130,14 +130,15 @@
     <div class="section">
         <div class="section-title">1) Pumili ng QR Image</div>
         <input type="file" id="qrUpload" accept="image/*">
+        
         <button id="btnScanNow" class="btn-orange" type="button" style="display: none;">
             Basahin at I-reverse ang QR Code
         </button>
     </div>
 
-    <!-- STEP 2: SECTIONS -->
+    <!-- STEP 2: AUTO FILL SECTIONS -->
     <div class="section">
-        <div class="section-title">2) Mga Bahagi ng QR String</div>
+        <div class="section-title">2) Hati-hating Bahagi ng QR String</div>
         
         <label>Part 1 (Base/Account Data):</label>
         <input type="text" id="part1Input" placeholder="Naka-abang sa pagbasa...">
@@ -149,11 +150,11 @@
         <input type="text" id="part2Input" placeholder="Naka-abang sa pagbasa...">
     </div>
 
-    <!-- STEP 3: DECODE -->
+    <!-- STEP 3: DECODE ACCOUNT INFO BUTTON -->
     <button id="btnDecode" class="btn-blue" type="button">I-decode ang Impormasyon ng Account</button>
     <div id="accountInfoOutput" class="result-box" style="display: none;"></div>
 
-    <!-- STEP 4: GENERATE -->
+    <!-- STEP 4: GENERATE NEW QR BUTTON -->
     <button id="btnGenerate" class="btn-green" type="button">Generate Receive Money via QR</button>
     
     <div class="qr-output-container">
@@ -182,6 +183,7 @@
         }
 
         const html5QrCode = new Html5Qrcode("hidden-reader");
+
         html5QrCode.scanFile(selectedFile, true)
             .then(qrCodeText => {
                 parseAndSplitQR(qrCodeText);
@@ -193,29 +195,48 @@
             });
     });
 
-    // Pagsunod sa eksaktong Python logic para sa pag-parse ng QRPh string
+    // Tumpak na EMVCo TLV Parser para mahati ang Part 1, Amount, at Part 2
     function parseAndSplitQR(rawText) {
-        // Tanggalin ang huling 4 characters (CRC checksum)
-        const payloadWithoutCRC = rawText.substring(0, rawText.length - 4);
-        
-        const tag53Index = payloadWithoutCRC.indexOf("5303608");
-        const tag54Index = payloadWithoutCRC.indexOf("54");
-        
-        if (tag53Index !== -1 && tag54Index !== -1) {
-            const part1 = payloadWithoutCRC.substring(0, tag53Index);
+        let index = 0;
+        let tag54Start = -1;
+        let tag54End = -1;
+        let tag53Start = -1;
+
+        // I-scan ang string ayon sa EMVCo structure (Tag + Length + Value) hanggang bago ang CRC (huling 4 characters)
+        while (index < rawText.length - 4) {
+            let tag = rawText.substring(index, index + 2);
+            let lenStr = rawText.substring(index + 2, index + 4);
+            let len = parseInt(lenStr, 10);
             
-            const lengthIndicator = payloadWithoutCRC.substring(tag54Index + 2, tag54Index + 4);
-            const amountLength = parseInt(lengthIndicator, 10);
-            const amountValue = payloadWithoutCRC.substring(tag54Index + 4, tag54Index + 4 + amountLength);
+            if (isNaN(len)) break;
             
-            // Part 2: Mula pagkatapos ng amount hanggang dulo
-            const part2 = payloadWithoutCRC.substring(tag54Index + 4 + amountLength);
+            let valueEnd = index + 4 + len;
             
+            if (tag === "53") {
+                tag53Start = index;
+            } else if (tag === "54") {
+                tag54Start = index;
+                tag54End = valueEnd;
+                break;
+            }
+            
+            index = valueEnd;
+        }
+
+        if (tag54Start !== -1) {
+            // Kung may Tag 53 (Currency) bago ang Tag 54, isama ito sa paghati katulad ng iyong Python script
+            let splitIndex = (tag53Start !== -1 && tag53Start === tag54Start - 7) ? tag53Start : tag54Start;
+            
+            const part1 = rawText.substring(0, splitIndex);
+            const amountVal = rawText.substring(tag54Start + 4, tag54End);
+            const part2 = rawText.substring(tag54End, rawText.length - 4);
+
             document.getElementById('part1Input').value = part1;
-            document.getElementById('amountInput').value = parseFloat(amountValue);
+            document.getElementById('amountInput').value = parseFloat(amountVal);
             document.getElementById('part2Input').value = part2;
         } else {
-            const part1 = payloadWithoutCRC;
+            // Static QR na walang nakatakdang halaga / amount
+            const part1 = rawText.substring(0, rawText.length - 4);
             document.getElementById('part1Input').value = part1;
             document.getElementById('amountInput').value = "";
             document.getElementById('part2Input').value = "";
@@ -224,14 +245,8 @@
 
     document.getElementById('btnDecode').addEventListener('click', function() {
         const part1 = document.getElementById('part1Input').value;
-        const amount = parseFloat(document.getElementById('amountInput').value) || 0;
-        const amountStr = amount > 0 ? amount.toFixed(2) : "";
-        const lengthStr = amountStr.length.toString().padStart(2, '0');
-        
-        // Buuin pansamantala ang buong string para ma-decode ang Tag 59 (Pangalan)
-        const amountPart = amount > 0 ? "530360854" + lengthStr + amountStr : "";
         const part2 = document.getElementById('part2Input').value;
-        const fullString = part1 + amountPart + part2;
+        const fullString = part1 + part2;
 
         if(!fullString) {
             alert("Walang QR data na babasahin. Mangyaring mag-reverse muna ng larawan.");
@@ -239,12 +254,17 @@
         }
 
         let name = "Hindi mahanap";
-        const tag59Index = fullString.indexOf("59");
-        if (tag59Index !== -1) {
-            const len = parseInt(fullString.substring(tag59Index + 2, tag59Index + 4), 10);
-            if (!isNaN(len)) {
-                name = fullString.substring(tag59Index + 4, tag59Index + 4 + len);
+        let index = 0;
+        while (index < fullString.length) {
+            let tag = fullString.substring(index, index + 2);
+            let len = parseInt(fullString.substring(index + 2, index + 4), 10);
+            if (isNaN(len)) break;
+            let val = fullString.substring(index + 4, index + 4 + len);
+            if (tag === "59") {
+                name = val;
+                break;
             }
+            index = index + 4 + len;
         }
         
         const outputDiv = document.getElementById('accountInfoOutput');
@@ -269,7 +289,6 @@
         return hex.padStart(4, '0');
     }
 
-    // Pag-generate ng bagong QR gamit ang eksaktong Python approach
     document.getElementById('btnGenerate').addEventListener('click', function() {
         const part1 = document.getElementById('part1Input').value;
         const part2 = document.getElementById('part2Input').value;
@@ -281,13 +300,15 @@
         }
 
         let newPayload = "";
+
         if (isNaN(amount) || amount <= 0) {
             newPayload = part1 + part2 + "6304";
         } else {
             const amountStr = amount.toFixed(2);
             const lengthStr = amountStr.length.toString().padStart(2, '0');
-            // Katulad ng Python code mo: part1 + currency_and_amount + part2
-            newPayload = part1 + "530360854" + lengthStr + amountStr + part2 + "6304";
+            const tag54 = "54" + lengthStr + amountStr;
+            const currencyTag = "5303608"; // PHP currency code standard sa QRPh
+            newPayload = part1 + currencyTag + tag54 + part2 + "6304";
         }
 
         const finalChecksum = computeCRC16(newPayload);
