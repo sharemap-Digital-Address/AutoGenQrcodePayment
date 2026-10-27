@@ -151,7 +151,7 @@
 <body>
 
 <div class="app-container">
-    <h2>QRPh Tools (6 Fields)</h2>
+    <h2>QRPh Tool (6 Fields)</h2>
     <div class="subtitle">Manual Reverse & Generate with Phone Routing</div>
     
     <div id="hidden-reader"></div>
@@ -242,41 +242,39 @@
     });
 
     function parseAndSplitTo6Fields(textToParse) {
+        // EditText 1: Unang 12 karakter (Header)
         let et1 = textToParse.substring(0, 12);
-        let remaining = textToParse.substring(12);
+        let payload = textToParse.substring(12, textToParse.length - 4);
         
-        if (remaining.includes("540")) {
-            remaining = remaining.replace(/54\d{2}\d+\.\d{2}/, "");
+        // Alisin ang lumang amount tag kung meron man
+        if (payload.includes("540")) {
+            payload = payload.replace(/54\d{2}\d+\.\d{2}/, "");
         }
 
-        let tag03Index = remaining.indexOf("0315");
-        if (tag03Index === -1) tag03Index = 0;
-
-        let et2 = remaining.substring(0, tag03Index + 4); 
-        let afterEt2 = remaining.substring(tag03Index + 4);
+        // Hanapin ang posisyon ng "0315" para sa phone routing parameter
+        let tag03Pos = payload.indexOf("0315");
         
-        let et3 = afterEt2.substring(0, 15);
-        let afterEt3 = afterEt2.substring(15);
-        
-        let crcIndex = afterEt3.indexOf("6304");
-        if (crcIndex === -1) crcIndex = afterEt3.length - 4;
-        
-        let et4 = afterEt3.substring(0, crcIndex);
-        let et6 = afterEt3.substring(crcIndex);
-
-        document.getElementById('edit-text-1').value = et1;
-        document.getElementById('edit-text-2').value = et2;
-        document.getElementById('edit-text-3').value = et3;
-        document.getElementById('edit-text-4').value = et4;
-        document.getElementById('edit-text-5').value = ""; 
-        document.getElementById('edit-text-6').value = et6;
+        if (tag03Pos !== -1) {
+            let et2 = payload.substring(0, tag03Pos);
+            let et3 = payload.substring(tag03Pos + 4, tag03Pos + 4 + 15); // 15 digits ng phone routing
+            let et4 = payload.substring(tag03Pos + 4 + 15);
+            
+            document.getElementById('edit-text-1').value = et1;
+            document.getElementById('edit-text-2').value = et2;
+            document.getElementById('edit-text-3').value = et3;
+            document.getElementById('edit-text-4').value = et4;
+            document.getElementById('edit-text-5').value = ""; 
+            document.getElementById('edit-text-6').value = "6304" + textToParse.substring(textToParse.length - 4);
+        } else {
+            alert("Hindi natagpuan ang tamang routing parameter sa QR code.");
+        }
     }
 
     document.getElementById('btnDecode').addEventListener('click', function() {
         const et2 = document.getElementById('edit-text-2').value;
         const et3 = document.getElementById('edit-text-3').value;
         const et4 = document.getElementById('edit-text-4').value;
-        const fullString = et2 + et3 + et4;
+        const fullString = et2 + "0315" + et3 + et4;
 
         if(!fullString) {
             alert("Walang QR data na babasahin. Mag-upload muna ng larawan.");
@@ -338,11 +336,12 @@
             const amountStr = amount.toFixed(2);
             const lengthStr = amountStr.length.toString().padStart(2, '0');
             const tag54 = "54" + lengthStr + amountStr;
-            const currencyTag = "5303608"; 
+            const currencyTag = "5303608"; // PHP currency code
             amountTagFull = currencyTag + tag54;
         }
 
-        let combinedStringWithoutCRC = et1 + et2 + et3 + amountTagFull + et4 + "6304";
+        // Pagsasama kasama ang "0315" sa unahan ng et3
+        let combinedStringWithoutCRC = et1 + et2 + "0315" + et3 + amountTagFull + et4 + "6304";
         const finalChecksum = computeCRC16(combinedStringWithoutCRC);
         const completeQRString = combinedStringWithoutCRC + finalChecksum;
 
@@ -362,7 +361,6 @@
         document.getElementById("btnDownload").style.display = "block";
     });
 
-    // Inayos na Download script na may kasamang Quiet Zone (Puting Paligid)
     document.getElementById('btnDownload').addEventListener('click', function() {
         const sourceCanvas = document.querySelector("#qrcode canvas");
         if (!sourceCanvas) {
@@ -370,21 +368,16 @@
             return;
         }
 
-        // Gumawa ng bagong canvas na may padding para sa Quiet Zone
-        const padding = 40; // 40px puting margin sa paligid
+        const padding = 40;
         const newCanvas = document.createElement('canvas');
         newCanvas.width = sourceCanvas.width + (padding * 2);
         newCanvas.height = sourceCanvas.height + (padding * 2);
         const ctx = newCanvas.getContext('2d');
 
-        // Kulayan ng solid white ang background
         ctx.fillStyle = "#ffffff";
         ctx.fillRect(0, 0, newCanvas.width, newCanvas.height);
-
-        // I-guhit ang QR code sa gitna
         ctx.drawImage(sourceCanvas, padding, padding);
 
-        // I-download ang image
         const imageURL = newCanvas.toDataURL("image/png");
         const a = document.createElement("a");
         a.href = imageURL;
