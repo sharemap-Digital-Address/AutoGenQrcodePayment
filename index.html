@@ -150,7 +150,7 @@
 <body>
 
 <div class="app-container">
-    <h2>QRPh Toola (6 Fields)</h2>
+    <h2>QRPh Tool (6 Fields)</h2>
     <div class="subtitle">Manual Reverse & Generate with Phone Routing</div>
     
     <div id="hidden-reader"></div>
@@ -254,28 +254,35 @@
             remaining = remaining.replace("5303608", "");
         }
 
-        let tag03Index = remaining.indexOf("03");
-        if (tag03Index === -1) tag03Index = 0;
+        // Gamitin ang "0315" para eksaktong mahanap ang routing parameter ng GCash QRPh
+        let tag03Index = remaining.indexOf("0315");
+        if (tag03Index === -1) {
+            tag03Index = remaining.indexOf("03");
+        }
 
         let et2 = remaining.substring(0, tag03Index); 
         let afterEt2 = remaining.substring(tag03Index);
         
+        // Dinamikong basahin ang Sub-tag 03
         let subTag03Len = parseInt(afterEt2.substring(2, 4), 10);
         let subTag03TotalLen = 4 + subTag03Len;
         let et3 = afterEt2.substring(4, subTag03TotalLen); 
         let afterEt3 = afterEt2.substring(subTag03TotalLen);
         
+        // Dinamikong basahin ang Sub-tag 04
         let subTag04Len = parseInt(afterEt3.substring(2, 4), 10);
         let subTag04TotalLen = 4 + subTag04Len; 
         savedSubTag04 = afterEt3.substring(0, subTag04TotalLen);
         
         let restOfTags = afterEt3.substring(subTag04TotalLen);
 
-        if (restOfTags.startsWith("52")) {
-            let tag52Len = parseInt(restOfTags.substring(2, 4), 10);
+        // Hanapin ang Tag 52 gamit ang indexOf para sigurado
+        let tag52Index = restOfTags.indexOf("52");
+        if (tag52Index !== -1) {
+            let tag52Len = parseInt(restOfTags.substring(tag52Index + 2, tag52Index + 4), 10);
             let tag52TotalLen = 4 + tag52Len;
-            savedTag52 = restOfTags.substring(0, tag52TotalLen); 
-            let afterTag52 = restOfTags.substring(tag52TotalLen);
+            savedTag52 = restOfTags.substring(tag52Index, tag52Index + tag52TotalLen); 
+            let afterTag52 = restOfTags.substring(tag52Index + tag52TotalLen);
 
             if (afterTag52.startsWith("5303608")) {
                 afterTag52 = afterTag52.substring(7);
