@@ -254,54 +254,55 @@
             remaining = remaining.replace("5303608", "");
         }
 
-        // Gamitin ang "0315" para eksaktong mahanap ang routing parameter ng GCash QRPh
-        let tag03Index = remaining.indexOf("0315");
-        if (tag03Index === -1) {
-            tag03Index = remaining.indexOf("03");
-        }
-
-        let et2 = remaining.substring(0, tag03Index); 
-        let afterEt2 = remaining.substring(tag03Index);
-        
-        // Dinamikong basahin ang Sub-tag 03
-        let subTag03Len = parseInt(afterEt2.substring(2, 4), 10);
-        let subTag03TotalLen = 4 + subTag03Len;
-        let et3 = afterEt2.substring(4, subTag03TotalLen); 
-        let afterEt3 = afterEt2.substring(subTag03TotalLen);
-        
-        // Dinamikong basahin ang Sub-tag 04
-        let subTag04Len = parseInt(afterEt3.substring(2, 4), 10);
-        let subTag04TotalLen = 4 + subTag04Len; 
-        savedSubTag04 = afterEt3.substring(0, subTag04TotalLen);
-        
-        let restOfTags = afterEt3.substring(subTag04TotalLen);
-
-        // Hanapin ang Tag 52 gamit ang indexOf para sigurado
-        let tag52Index = restOfTags.indexOf("52");
-        if (tag52Index !== -1) {
-            let tag52Len = parseInt(restOfTags.substring(tag52Index + 2, tag52Index + 4), 10);
-            let tag52TotalLen = 4 + tag52Len;
-            savedTag52 = restOfTags.substring(tag52Index, tag52Index + tag52TotalLen); 
-            let afterTag52 = restOfTags.substring(tag52Index + tag52TotalLen);
-
-            if (afterTag52.startsWith("5303608")) {
-                afterTag52 = afterTag52.substring(7);
-            }
-
-            let crcIndex = afterTag52.indexOf("6304");
-            if (crcIndex === -1) crcIndex = afterTag52.length - 4;
+        // Hanapin ang Tag 27 kung saan nagsisimula ang merchant info
+        let tag27Index = remaining.indexOf("27");
+        if (tag27Index !== -1) {
+            let afterTag27 = remaining.substring(tag27Index + 4); // Lagpasan ang "27" at 2-digit length
             
-            savedEt4Rest = afterTag52.substring(0, crcIndex);
-            let et6 = afterTag52.substring(crcIndex);
+            // Hanapin ang sub-tag 00 o 01 o 03 sa loob ng Tag 27
+            let tag03Index = afterTag27.indexOf("03");
+            let et2 = afterTag27.substring(0, tag03Index);
+            let afterEt2 = afterTag27.substring(tag03Index);
 
-            document.getElementById('edit-text-1').value = et1;
-            document.getElementById('edit-text-2').value = et2;
-            document.getElementById('edit-text-3').value = et3;
-            document.getElementById('edit-text-4').value = savedEt4Rest;
-            document.getElementById('edit-text-5').value = ""; 
-            document.getElementById('edit-text-6').value = et6;
+            let subTag03Len = parseInt(afterEt2.substring(2, 4), 10);
+            let subTag03TotalLen = 4 + subTag03Len;
+            let et3 = afterEt2.substring(4, subTag03TotalLen);
+            let afterEt3 = afterEt2.substring(subTag03TotalLen);
+
+            let subTag04Len = parseInt(afterEt3.substring(2, 4), 10);
+            let subTag04TotalLen = 4 + subTag04Len;
+            savedSubTag04 = afterEt3.substring(0, subTag04TotalLen);
+
+            let restOfTags = afterEt3.substring(subTag04TotalLen);
+
+            let tag52Index = restOfTags.indexOf("52");
+            if (tag52Index !== -1) {
+                let tag52Len = parseInt(restOfTags.substring(tag52Index + 2, tag52Index + 4), 10);
+                let tag52TotalLen = 4 + tag52Len;
+                savedTag52 = restOfTags.substring(tag52Index, tag52Index + tag52TotalLen);
+                let afterTag52 = restOfTags.substring(tag52Index + tag52TotalLen);
+
+                if (afterTag52.startsWith("5303608")) {
+                    afterTag52 = afterTag52.substring(7);
+                }
+
+                let crcIndex = afterTag52.indexOf("6304");
+                if (crcIndex === -1) crcIndex = afterTag52.length - 4;
+
+                savedEt4Rest = afterTag52.substring(0, crcIndex);
+                let et6 = afterTag52.substring(crcIndex);
+
+                document.getElementById('edit-text-1').value = et1;
+                document.getElementById('edit-text-2').value = et2;
+                document.getElementById('edit-text-3').value = et3;
+                document.getElementById('edit-text-4').value = savedEt4Rest;
+                document.getElementById('edit-text-5').value = "";
+                document.getElementById('edit-text-6').value = et6;
+            } else {
+                alert("Babala: Hindi natagpuan ang simula ng Tag 52.");
+            }
         } else {
-            alert("Babala: Hindi natagpuan ang simula ng Tag 52 sa QR string.");
+            alert("Babala: Hindi natagpuan ang Tag 27.");
         }
     }
 
@@ -372,6 +373,7 @@
             return;
         }
 
+        // Dinamikong kalkulahin ang haba ng sub-tag 03 at buong Tag 27
         let subTag03LenStr = et3Val.length.toString().padStart(2, '0');
         let subTag03 = "03" + subTag03LenStr + et3Val;
 
@@ -433,7 +435,7 @@
         const imageURL = newCanvas.toDataURL("image/png");
         const a = document.createElement("a");
         a.href = imageURL;
-        a.download = "GCash_QR_Fixed.png";
+        a.download = "GCash_QR_Valid_Standard.png";
         document.body.appendChild(a);
         a.click();
         document.body.removeChild(a);
