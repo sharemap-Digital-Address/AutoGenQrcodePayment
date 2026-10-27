@@ -150,7 +150,7 @@
 <body>
 
 <div class="app-container">
-    <h2>QRPh Tool t(6 Fields)</h2>
+    <h2>QRPh Tool (6 Fields)</h2>
     <div class="subtitle">Manual Reverse & Generate with Phone Routing</div>
     
     <div id="hidden-reader"></div>
@@ -176,7 +176,7 @@
         <input type="text" id="edit-text-2" placeholder="Naka-abang sa pagbasa..." readonly>
         
         <label>• EditText 3 (Phone Number / Routing Parameter) - [EDITABLE]:</label>
-        <input type="text" id="edit-text-3" placeholder="Ilagay ang Token o Mobile Number...">
+        <input type="text" id="edit-text-3" placeholder="Ilagay ang Token o Routing ID...">
         
         <label>• EditText 4 (Pangalan, Lokasyon at Extra Tags) - [Readonly]:</label>
         <input type="text" id="edit-text-4" placeholder="Naka-abang sa pagbasa..." readonly>
@@ -254,16 +254,22 @@
             remaining = remaining.replace("5303608", "");
         }
 
-        // Hanapin ang Tag 27 kung saan nagsisimula ang merchant info
+        // Hanapin ang Tag 27
         let tag27Index = remaining.indexOf("27");
         if (tag27Index !== -1) {
-            let afterTag27 = remaining.substring(tag27Index + 4); // Lagpasan ang "27" at 2-digit length
+            let afterTag27 = remaining.substring(tag27Index + 4); 
             
-            // Hanapin ang sub-tag 00 o 01 o 03 sa loob ng Tag 27
-            let tag03Index = afterTag27.indexOf("03");
-            let et2 = afterTag27.substring(0, tag03Index);
-            let afterEt2 = afterTag27.substring(tag03Index);
+            // Hanapin ang "com.p2pqrpay" para ligtas na masundan ang sub-tag 03
+            let p2pIndex = afterTag27.indexOf("com.p2pqrpay");
+            let et2 = afterTag27.substring(0, p2pIndex); // Kasama ang com.p2pqrpay at mga naunang maliliit na sub-tags
+            
+            // Maghanap ng "0315" simula sa p2pIndex para hindi magkamali ng saltok
+            let tag03Index = afterTag27.indexOf("0315", p2pIndex);
+            if (tag03Index === -1) {
+                tag03Index = afterTag27.indexOf("03", p2pIndex);
+            }
 
+            let afterEt2 = afterTag27.substring(tag03Index);
             let subTag03Len = parseInt(afterEt2.substring(2, 4), 10);
             let subTag03TotalLen = 4 + subTag03Len;
             let et3 = afterEt2.substring(4, subTag03TotalLen);
@@ -294,7 +300,7 @@
 
                 document.getElementById('edit-text-1').value = et1;
                 document.getElementById('edit-text-2').value = et2;
-                document.getElementById('edit-text-3').value = et3;
+                document.getElementById('edit-text-3').value = et3; // Dito na papasok nang tama ang routing token (hal. 217020000000656)
                 document.getElementById('edit-text-4').value = savedEt4Rest;
                 document.getElementById('edit-text-5').value = "";
                 document.getElementById('edit-text-6').value = et6;
@@ -373,7 +379,6 @@
             return;
         }
 
-        // Dinamikong kalkulahin ang haba ng sub-tag 03 at buong Tag 27
         let subTag03LenStr = et3Val.length.toString().padStart(2, '0');
         let subTag03 = "03" + subTag03LenStr + et3Val;
 
@@ -435,7 +440,7 @@
         const imageURL = newCanvas.toDataURL("image/png");
         const a = document.createElement("a");
         a.href = imageURL;
-        a.download = "GCash_QR_Valid_Standard.png";
+        a.download = "GCash_QR_Fixed_Parser.png";
         document.body.appendChild(a);
         a.click();
         document.body.removeChild(a);
