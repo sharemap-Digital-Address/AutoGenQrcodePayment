@@ -162,7 +162,7 @@
         <input type="file" id="qrUpload" accept="image/*">
         
         <button id="btnScanNow" class="btn-orange" type="button" style="display: none;">
-            Basahin at I-reverse ang QR Code
+            Basahin ang QR Code
         </button>
     </div>
 
@@ -180,7 +180,7 @@
         <input type="text" id="edit-text-3" placeholder="Naka-abang sa pagbasa...">
         
         <label>• EditText 4 (Pangalan at Lokasyon) - [Readonly]:</label>
-        <input type="text" id="edit-text-4" placeholder="Naka-abang sa pagbasa...">
+        <input type="text" id="edit-text-4" placeholder="Naka-abang sa pagbasa..." readonly>
         
         <label>• EditText 5 (Halaga / Amount) - [ANG EDITABLE PART]:</label>
         <input type="number" id="edit-text-5" placeholder="0.00" step="0.01">
@@ -204,14 +204,13 @@
 
     <div class="qr-output-container">
         <div id="qrcode"></div>
-        <button id="btnDownload" class="btn-gray" type="button" style="display: none;">I-download ang QR Image</button>
+        <button id="btnDownload" class="btn-gray" type="button" style="display: none;">I-download ang QR Image (May Quiet Zone)</button>
     </div>
 </div>
 
 <script>
     let selectedFile = null;
 
-    // Pagpili ng File
     document.getElementById('qrUpload').addEventListener('change', function(e) {
         const files = e.target.files;
         if (files && files.length > 0) {
@@ -223,7 +222,6 @@
         }
     });
 
-    // Pindutin ang Scan Button para basahin ang QR
     document.getElementById('btnScanNow').addEventListener('click', function() {
         if (!selectedFile) {
             alert("Mangyaring pumili muna ng larawan.");
@@ -243,49 +241,37 @@
             });
     });
 
-    // Logika para hatiin sa 6 na EditText
     function parseAndSplitTo6Fields(textToParse) {
-        // 1. EditText 1: Header (Unang 12 karakter)
         let et1 = textToParse.substring(0, 12);
         let remaining = textToParse.substring(12);
         
-        // Alisin ang lumang amount tag kung mayroon man
         if (remaining.includes("540")) {
             remaining = remaining.replace(/54\d{2}\d+\.\d{2}/, "");
         }
 
-        // Hanapin ang posisyon ng Phone Routing Parameter (Tag 03 ng Merchant Info)
         let tag03Index = remaining.indexOf("0315");
         if (tag03Index === -1) tag03Index = 0;
 
-        // 2. EditText 2: Merchant Info bago mag-phone number
         let et2 = remaining.substring(0, tag03Index + 4); 
         let afterEt2 = remaining.substring(tag03Index + 4);
         
-        // 3. EditText 3: Ang mismong Phone Parameter Value (15 karakter)
         let et3 = afterEt2.substring(0, 15);
         let afterEt3 = afterEt2.substring(15);
         
-        // Hanapin ang simula ng CRC (6304) sa dulo
         let crcIndex = afterEt3.indexOf("6304");
         if (crcIndex === -1) crcIndex = afterEt3.length - 4;
         
-        // 4. EditText 4: Pangalan at Lokasyon hanggang bago mag-CRC
         let et4 = afterEt3.substring(0, crcIndex);
-        
-        // 6. EditText 6: CRC Base at Checksum
         let et6 = afterEt3.substring(crcIndex);
 
-        // I-set ang mga halaga sa mga input fields
         document.getElementById('edit-text-1').value = et1;
         document.getElementById('edit-text-2').value = et2;
         document.getElementById('edit-text-3').value = et3;
         document.getElementById('edit-text-4').value = et4;
-        document.getElementById('edit-text-5').value = ""; // Blanko para sa bagong amount
+        document.getElementById('edit-text-5').value = ""; 
         document.getElementById('edit-text-6').value = et6;
     }
 
-    // Decode Account Name (Tag 59)
     document.getElementById('btnDecode').addEventListener('click', function() {
         const et2 = document.getElementById('edit-text-2').value;
         const et3 = document.getElementById('edit-text-3').value;
@@ -293,7 +279,7 @@
         const fullString = et2 + et3 + et4;
 
         if(!fullString) {
-            alert("Walang QR data na babasahin. Mangyaring mag-upload at i-reverse muna ng larawan.");
+            alert("Walang QR data na babasahin. Mag-upload muna ng larawan.");
             return;
         }
 
@@ -316,7 +302,6 @@
         outputDiv.innerHTML = `<strong>Pangalan ng Account:</strong> ${name}\n<strong>Network/Routing:</strong> InstaPay (QRPh)\n<strong>Status:</strong> Handa nang gawan ng bagong presyo.`;
     });
 
-    // CRC16 Standard Checksum Calculator (CCITT-FALSE)
     function computeCRC16(str) {
         let crc = 0xFFFF;
         for (let c = 0; c < str.length; c++) {
@@ -334,7 +319,6 @@
         return hex.padStart(4, '0');
     }
 
-    // Generate Bagong QR Code gamit ang 6 fields
     document.getElementById('btnGenerate').addEventListener('click', function() {
         let et1 = document.getElementById('edit-text-1').value;
         let et2 = document.getElementById('edit-text-2').value;
@@ -354,22 +338,17 @@
             const amountStr = amount.toFixed(2);
             const lengthStr = amountStr.length.toString().padStart(2, '0');
             const tag54 = "54" + lengthStr + amountStr;
-            const currencyTag = "5303608"; // PHP currency code standard sa QRPh
+            const currencyTag = "5303608"; 
             amountTagFull = currencyTag + tag54;
         }
 
-        // Pagsasamahin ang payload para sa CRC calculation
         let combinedStringWithoutCRC = et1 + et2 + et3 + amountTagFull + et4 + "6304";
         const finalChecksum = computeCRC16(combinedStringWithoutCRC);
         const completeQRString = combinedStringWithoutCRC + finalChecksum;
 
-        // I-update ang EditText 6 para sa bagong checksum
         document.getElementById('edit-text-6').value = "6304" + finalChecksum;
-
-        // Ipakita ang buong string sa textarea
         document.getElementById("finalStringOutput").value = completeQRString;
 
-        // I-render ang QR Code na may High Error Correction at 300x300 size
         document.getElementById("qrcode").innerHTML = "";
         new QRCode(document.getElementById("qrcode"), {
             text: completeQRString,
@@ -380,21 +359,36 @@
             correctLevel : QRCode.CorrectLevel.H
         });
 
-        // Ipakita ang download button
         document.getElementById("btnDownload").style.display = "block";
     });
 
-    // I-download ang QR Image
+    // Inayos na Download script na may kasamang Quiet Zone (Puting Paligid)
     document.getElementById('btnDownload').addEventListener('click', function() {
-        const canvas = document.querySelector("#qrcode canvas");
-        if (!canvas) {
+        const sourceCanvas = document.querySelector("#qrcode canvas");
+        if (!sourceCanvas) {
             alert("Wala pang QR code na naka-generate.");
             return;
         }
-        const imageURL = canvas.toDataURL("image/png");
+
+        // Gumawa ng bagong canvas na may padding para sa Quiet Zone
+        const padding = 40; // 40px puting margin sa paligid
+        const newCanvas = document.createElement('canvas');
+        newCanvas.width = sourceCanvas.width + (padding * 2);
+        newCanvas.height = sourceCanvas.height + (padding * 2);
+        const ctx = newCanvas.getContext('2d');
+
+        // Kulayan ng solid white ang background
+        ctx.fillStyle = "#ffffff";
+        ctx.fillRect(0, 0, newCanvas.width, newCanvas.height);
+
+        // I-guhit ang QR code sa gitna
+        ctx.drawImage(sourceCanvas, padding, padding);
+
+        // I-download ang image
+        const imageURL = newCanvas.toDataURL("image/png");
         const a = document.createElement("a");
         a.href = imageURL;
-        a.download = "QRPh_Custom_Amount.png";
+        a.download = "GCash_QR_Valid.png";
         document.body.appendChild(a);
         a.click();
         document.body.removeChild(a);
