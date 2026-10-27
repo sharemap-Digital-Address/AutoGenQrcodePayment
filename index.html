@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>QRPh Tool (Reverse & Generate)</title>
+    <title>QRPh Tool (6 Fields Reverse & Generate)</title>
     
     <!-- Tamang QR Scanner Library (html5-qrcode) -->
     <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
@@ -21,7 +21,7 @@
         }
         .app-container {
             background-color: #ffffff;
-            max-width: 500px;
+            max-width: 550px;
             width: 100%;
             padding: 25px;
             border-radius: 16px;
@@ -32,6 +32,13 @@
             color: #0052cc;
             text-align: center;
             margin-top: 0;
+            margin-bottom: 5px;
+        }
+        .subtitle {
+            text-align: center;
+            color: #666;
+            font-size: 13px;
+            margin-bottom: 20px;
         }
         .section {
             border: 1px solid #e0e0e0;
@@ -54,14 +61,27 @@
             display: block;
             margin-top: 10px;
         }
-        input[type="text"], input[type="number"], input[type="file"] {
+        input[type="text"], input[type="number"], input[type="file"], textarea {
             width: 100%;
             padding: 10px;
             margin-top: 5px;
             border: 1px solid #ccc;
             border-radius: 6px;
             box-sizing: border-box;
-            font-size: 14px;
+            font-size: 13px;
+            font-family: monospace;
+            background-color: #f9f9f9;
+        }
+        /* Espesyal na kulay para sa Editable Fields (EditText 3 at EditText 5) */
+        #edit-text-3, #edit-text-5 {
+            background-color: #ffffff !important;
+            border: 2px solid #0052cc !important;
+            font-weight: bold;
+            color: #0052cc;
+        }
+        textarea {
+            resize: vertical;
+            height: 60px;
         }
         button {
             width: 100%;
@@ -89,10 +109,17 @@
         }
         .btn-green {
             background-color: #28a745;
-            margin-top: 20px;
+            margin-top: 15px;
         }
         .btn-green:hover {
             background-color: #1e7e34;
+        }
+        .btn-gray {
+            background-color: #6c757d;
+            margin-top: 10px;
+        }
+        .btn-gray:hover {
+            background-color: #5a6268;
         }
         .result-box {
             background-color: #e6f0ff;
@@ -111,7 +138,7 @@
         #qrcode {
             display: inline-block;
             background: white;
-            padding: 20px; /* Pinalawak ang padding para sa quiet zone */
+            padding: 20px;
             border: 1px solid #ddd;
             border-radius: 12px;
             box-shadow: 0 4px 10px rgba(0,0,0,0.05);
@@ -124,11 +151,12 @@
 <body>
 
 <div class="app-container">
-    <h2>QRPh Tool (Reverse & Generate)</h2>
+    <h2>QRPh Tool (6 Fields)</h2>
+    <div class="subtitle">Manual Reverse & Generate with Phone Routing</div>
     
     <div id="hidden-reader"></div>
 
-    <!-- STEP 1: UPLOAD & BUTTON -->
+    <!-- 1. UPLOAD SECTION -->
     <div class="section">
         <div class="section-title">1) Pumili ng QR Image</div>
         <input type="file" id="qrUpload" accept="image/*">
@@ -138,35 +166,52 @@
         </button>
     </div>
 
-    <!-- STEP 2: AUTO FILL SECTIONS -->
+    <!-- 2. ANG 6 NA EDITTEXT FIELDS -->
     <div class="section">
-        <div class="section-title">2) Hati-hating Bahagi ng QR String</div>
+        <div class="section-title">2) 6 Na Bahagi ng QR String</div>
         
-        <label>Part 1 (Base/Account Data):</label>
-        <input type="text" id="part1Input" placeholder="Naka-abang sa pagbasa...">
+        <label>• EditText 1 (Header/Format) - [Readonly]:</label>
+        <input type="text" id="edit-text-1" placeholder="Naka-abang sa pagbasa..." readonly>
         
-        <label>Halaga / Amount (Maaaring palitan):</label>
-        <input type="number" id="amountInput" placeholder="Ilagay ang bagong halaga..." step="any">
+        <label>• EditText 2 (Merchant Info Base) - [Readonly]:</label>
+        <input type="text" id="edit-text-2" placeholder="Naka-abang sa pagbasa..." readonly>
         
-        <label>Part 2 (Suffix/Location Data):</label>
-        <input type="text" id="part2Input" placeholder="Naka-abang sa pagbasa...">
+        <label>• EditText 3 (Phone Number Routing Parameter) - [EDITABLE]:</label>
+        <input type="text" id="edit-text-3" placeholder="Naka-abang sa pagbasa...">
+        
+        <label>• EditText 4 (Pangalan at Lokasyon) - [Readonly]:</label>
+        <input type="text" id="edit-text-4" placeholder="Naka-abang sa pagbasa...">
+        
+        <label>• EditText 5 (Halaga / Amount) - [ANG EDITABLE PART]:</label>
+        <input type="number" id="edit-text-5" placeholder="0.00" step="0.01">
+        
+        <label>• EditText 6 (CRC Checksum) - [Auto-updated]:</label>
+        <input type="text" id="edit-text-6" placeholder="Naka-abang sa pagbasa..." readonly>
     </div>
 
-    <!-- STEP 3: DECODE ACCOUNT INFO BUTTON -->
+    <!-- 3. DECODE ACCOUNT INFO BUTTON -->
     <button id="btnDecode" class="btn-blue" type="button">I-decode ang Impormasyon ng Account</button>
     <div id="accountInfoOutput" class="result-box" style="display: none;"></div>
 
-    <!-- STEP 4: GENERATE NEW QR BUTTON -->
-    <button id="btnGenerate" class="btn-green" type="button">Generate Receive Money via QR</button>
+    <!-- 4. GENERATE NEW QR BUTTON -->
+    <button id="btnGenerate" class="btn-green" type="button">2. Generate Bagong QR Code</button>
     
+    <!-- RESULT STRING & DOWNLOAD -->
+    <div style="margin-top: 15px;">
+        <label>Buong QR String na may CRC Hash:</label>
+        <textarea id="finalStringOutput" readonly placeholder="Lilitaw dito ang nabuong QR string..."></textarea>
+    </div>
+
     <div class="qr-output-container">
         <div id="qrcode"></div>
+        <button id="btnDownload" class="btn-gray" type="button" style="display: none;">I-download ang QR Image</button>
     </div>
 </div>
 
 <script>
     let selectedFile = null;
 
+    // Pagpili ng File
     document.getElementById('qrUpload').addEventListener('change', function(e) {
         const files = e.target.files;
         if (files && files.length > 0) {
@@ -178,6 +223,7 @@
         }
     });
 
+    // Pindutin ang Scan Button para basahin ang QR
     document.getElementById('btnScanNow').addEventListener('click', function() {
         if (!selectedFile) {
             alert("Mangyaring pumili muna ng larawan.");
@@ -188,8 +234,8 @@
 
         html5QrCode.scanFile(selectedFile, true)
             .then(qrCodeText => {
-                parseAndSplitQR(qrCodeText);
-                alert("Matagumpay na na-reverse at na-autofill ang mga detalye!");
+                parseAndSplitTo6Fields(qrCodeText);
+                alert("Matagumpay na na-reverse at na-autofill sa 6 na fields!");
             })
             .catch(err => {
                 alert("Hindi mabasa ang QR sa piniling larawan. Siguraduhing malinaw ang QR code.");
@@ -197,72 +243,57 @@
             });
     });
 
-    function parseAndSplitQR(rawText) {
-        let index = 0;
-        let tag54Start = -1;
-        let tag54End = -1;
-        let tag53Start = -1;
-        let tag58Start = -1;
-
-        while (index < rawText.length - 4) {
-            let tag = rawText.substring(index, index + 2);
-            let lenStr = rawText.substring(index + 2, index + 4);
-            let len = parseInt(lenStr, 10);
-            
-            if (isNaN(len)) break;
-            
-            let valueEnd = index + 4 + len;
-            
-            if (tag === "53") {
-                tag53Start = index;
-            } else if (tag === "54") {
-                tag54Start = index;
-                tag54End = valueEnd;
-                break;
-            } else if (tag === "58") {
-                tag58Start = index;
-            }
-            
-            index = valueEnd;
+    // Logika para hatiin sa 6 na EditText
+    function parseAndSplitTo6Fields(textToParse) {
+        // 1. EditText 1: Header (Unang 12 karakter)
+        let et1 = textToParse.substring(0, 12);
+        let remaining = textToParse.substring(12);
+        
+        // Alisin ang lumang amount tag kung mayroon man
+        if (remaining.includes("540")) {
+            remaining = remaining.replace(/54\d{2}\d+\.\d{2}/, "");
         }
 
-        if (tag54Start !== -1) {
-            let splitIndex = (tag53Start !== -1 && tag53Start === tag54Start - 7) ? tag53Start : tag54Start;
-            
-            const part1 = rawText.substring(0, splitIndex);
-            const amountVal = rawText.substring(tag54Start + 4, tag54End);
-            const part2 = rawText.substring(tag54End, rawText.length - 4);
+        // Hanapin ang posisyon ng Phone Routing Parameter (Tag 03 ng Merchant Info)
+        let tag03Index = remaining.indexOf("0315");
+        if (tag03Index === -1) tag03Index = 0;
 
-            document.getElementById('part1Input').value = part1;
-            document.getElementById('amountInput').value = parseFloat(amountVal);
-            document.getElementById('part2Input').value = part2;
-        } else {
-            let splitIdx = -1;
-            if (tag53Start !== -1) {
-                splitIdx = tag53Start;
-            } else if (tag58Start !== -1) {
-                splitIdx = tag58Start;
-            } else {
-                splitIdx = rawText.indexOf("5802PH");
-                if (splitIdx === -1) splitIdx = rawText.length - 30;
-            }
+        // 2. EditText 2: Merchant Info bago mag-phone number
+        let et2 = remaining.substring(0, tag03Index + 4); 
+        let afterEt2 = remaining.substring(tag03Index + 4);
+        
+        // 3. EditText 3: Ang mismong Phone Parameter Value (15 karakter)
+        let et3 = afterEt2.substring(0, 15);
+        let afterEt3 = afterEt2.substring(15);
+        
+        // Hanapin ang simula ng CRC (6304) sa dulo
+        let crcIndex = afterEt3.indexOf("6304");
+        if (crcIndex === -1) crcIndex = afterEt3.length - 4;
+        
+        // 4. EditText 4: Pangalan at Lokasyon hanggang bago mag-CRC
+        let et4 = afterEt3.substring(0, crcIndex);
+        
+        // 6. EditText 6: CRC Base at Checksum
+        let et6 = afterEt3.substring(crcIndex);
 
-            const part1 = rawText.substring(0, splitIdx);
-            const part2 = rawText.substring(splitIdx, rawText.length - 4);
-
-            document.getElementById('part1Input').value = part1;
-            document.getElementById('amountInput').value = "";
-            document.getElementById('part2Input').value = part2;
-        }
+        // I-set ang mga halaga sa mga input fields
+        document.getElementById('edit-text-1').value = et1;
+        document.getElementById('edit-text-2').value = et2;
+        document.getElementById('edit-text-3').value = et3;
+        document.getElementById('edit-text-4').value = et4;
+        document.getElementById('edit-text-5').value = ""; // Blanko para sa bagong amount
+        document.getElementById('edit-text-6').value = et6;
     }
 
+    // Decode Account Name (Tag 59)
     document.getElementById('btnDecode').addEventListener('click', function() {
-        const part1 = document.getElementById('part1Input').value;
-        const part2 = document.getElementById('part2Input').value;
-        const fullString = part1 + part2;
+        const et2 = document.getElementById('edit-text-2').value;
+        const et3 = document.getElementById('edit-text-3').value;
+        const et4 = document.getElementById('edit-text-4').value;
+        const fullString = et2 + et3 + et4;
 
         if(!fullString) {
-            alert("Walang QR data na babasahin. Mangyaring mag-reverse muna ng larawan.");
+            alert("Walang QR data na babasahin. Mangyaring mag-upload at i-reverse muna ng larawan.");
             return;
         }
 
@@ -285,6 +316,7 @@
         outputDiv.innerHTML = `<strong>Pangalan ng Account:</strong> ${name}\n<strong>Network/Routing:</strong> InstaPay (QRPh)\n<strong>Status:</strong> Handa nang gawan ng bagong presyo.`;
     });
 
+    // CRC16 Standard Checksum Calculator (CCITT-FALSE)
     function computeCRC16(str) {
         let crc = 0xFFFF;
         for (let c = 0; c < str.length; c++) {
@@ -302,34 +334,43 @@
         return hex.padStart(4, '0');
     }
 
+    // Generate Bagong QR Code gamit ang 6 fields
     document.getElementById('btnGenerate').addEventListener('click', function() {
-        const part1 = document.getElementById('part1Input').value;
-        const part2 = document.getElementById('part2Input').value;
-        const amount = parseFloat(document.getElementById('amountInput').value);
+        let et1 = document.getElementById('edit-text-1').value;
+        let et2 = document.getElementById('edit-text-2').value;
+        let et3 = document.getElementById('edit-text-3').value;
+        let et4 = document.getElementById('edit-text-4').value;
+        let et5 = document.getElementById('edit-text-5').value;
 
-        if (!part1) {
-            alert("Kailangan ng laman sa Part 1 field para makapag-generate.");
+        if (!et1 || !et3) {
+            alert("Kailangan ng laman ang EditText 1 at 3 para makapag-generate.");
             return;
         }
 
-        let newPayload = "";
+        let amountTagFull = "";
+        let amount = parseFloat(et5);
 
-        if (isNaN(amount) || amount <= 0) {
-            newPayload = part1 + part2 + "6304";
-        } else {
+        if (!isNaN(amount) && amount > 0) {
             const amountStr = amount.toFixed(2);
             const lengthStr = amountStr.length.toString().padStart(2, '0');
             const tag54 = "54" + lengthStr + amountStr;
             const currencyTag = "5303608"; // PHP currency code standard sa QRPh
-            newPayload = part1 + currencyTag + tag54 + part2 + "6304";
+            amountTagFull = currencyTag + tag54;
         }
 
-        const finalChecksum = computeCRC16(newPayload);
-        const completeQRString = newPayload + finalChecksum;
+        // Pagsasamahin ang payload para sa CRC calculation
+        let combinedStringWithoutCRC = et1 + et2 + et3 + amountTagFull + et4 + "6304";
+        const finalChecksum = computeCRC16(combinedStringWithoutCRC);
+        const completeQRString = combinedStringWithoutCRC + finalChecksum;
 
+        // I-update ang EditText 6 para sa bagong checksum
+        document.getElementById('edit-text-6').value = "6304" + finalChecksum;
+
+        // Ipakita ang buong string sa textarea
+        document.getElementById("finalStringOutput").value = completeQRString;
+
+        // I-render ang QR Code na may High Error Correction at 300x300 size
         document.getElementById("qrcode").innerHTML = "";
-        
-        // Pinakamahalagang pagbabago: Pinalaki ang size (300x300) at ginawang High Error Correction Level (H)
         new QRCode(document.getElementById("qrcode"), {
             text: completeQRString,
             width: 300,
@@ -338,6 +379,25 @@
             colorLight : "#ffffff",
             correctLevel : QRCode.CorrectLevel.H
         });
+
+        // Ipakita ang download button
+        document.getElementById("btnDownload").style.display = "block";
+    });
+
+    // I-download ang QR Image
+    document.getElementById('btnDownload').addEventListener('click', function() {
+        const canvas = document.querySelector("#qrcode canvas");
+        if (!canvas) {
+            alert("Wala pang QR code na naka-generate.");
+            return;
+        }
+        const imageURL = canvas.toDataURL("image/png");
+        const a = document.createElement("a");
+        a.href = imageURL;
+        a.download = "QRPh_Custom_Amount.png";
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
     });
 </script>
 
