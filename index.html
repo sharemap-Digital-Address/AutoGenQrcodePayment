@@ -72,7 +72,6 @@
             font-family: monospace;
             background-color: #f9f9f9;
         }
-        /* Espesyal na kulay para sa Editable Fields (EditText 3 at EditText 5) */
         #edit-text-3, #edit-text-5 {
             background-color: #ffffff !important;
             border: 2px solid #0052cc !important;
@@ -151,7 +150,7 @@
 <body>
 
 <div class="app-container">
-    <h2>QRPh Tools (6 Fields)</h2>
+    <h2>QRPh Tool (6 Fields)</h2>
     <div class="subtitle">Manual Reverse & Generate with Phone Routing</div>
     
     <div id="hidden-reader"></div>
@@ -245,8 +244,8 @@
         let et1 = textToParse.substring(0, 12);
         let remaining = textToParse.substring(12);
         
-        // Alisin ang lumang amount kung meron man para hindi sumobra
-        if (remaining.includes("540")) {
+        // Alisin ang lumang amount kung sakaling mayroon sa na-scan
+        if (remaining.includes("54")) {
             remaining = remaining.replace(/54\d{2}\d+\.\d{2}/, "");
         }
 
@@ -267,7 +266,7 @@
 
         document.getElementById('edit-text-1').value = et1;
         document.getElementById('edit-text-2').value = et2;
-        document.getElementById('edit-text-3').value = et3; // Dito mo pwede palitan kung nais mo i-test ang mobile number format
+        document.getElementById('edit-text-3').value = et3;
         document.getElementById('edit-text-4').value = et4;
         document.getElementById('edit-text-5').value = ""; 
         document.getElementById('edit-text-6').value = et6;
@@ -332,20 +331,31 @@
             return;
         }
 
-        let amountTagFull = "";
+        let amountTag = "";
         let amount = parseFloat(et5);
 
-        // Kung may nilagay na amount (tulad ng 40 pesos), idagdag ang Currency (53) at Amount (54)
+        // Kung may nilagay na amount, i-format ito sa tamang EMVCo Tag 54 format
         if (!isNaN(amount) && amount > 0) {
             const amountStr = amount.toFixed(2);
             const lengthStr = amountStr.length.toString().padStart(2, '0');
-            const tag54 = "54" + lengthStr + amountStr;
-            const currencyTag = "5303608"; 
-            amountTagFull = currencyTag + tag54;
+            amountTag = "54" + lengthStr + amountStr;
         }
 
-        // Pagsasama ng mga bahagi sa tamang pagkakasunod-sunod
-        let combinedStringWithoutCRC = et1 + et2 + et3 + amountTagFull + et4 + "6304";
+        // Hanapin kung nasaan ang Tag 53 ("5303608") sa loob ng et4 para maisingit eksakto sa pagitan ng Tag 53 at Tag 58
+        let currencyPos = et4.indexOf("5303608");
+        let modifiedEt4 = et4;
+
+        if (currencyPos !== -1) {
+            let beforeCurrency = et4.substring(0, currencyPos + 7); // Hanggang "5303608"
+            let afterCurrency = et4.substring(currencyPos + 7);   // Mula "5802PH..." patuloy
+            modifiedEt4 = beforeCurrency + amountTag + afterCurrency;
+        } else {
+            // Kung sakaling walang currency tag sa et4, ilagay sa dulo bago ang CRC
+            modifiedEt4 = et4 + amountTag;
+        }
+
+        // Pagsasama ng buong payload sa tamang pagkakasunod-sunod
+        let combinedStringWithoutCRC = et1 + et2 + "0315" + et3 + modifiedEt4 + "6304";
         const finalChecksum = computeCRC16(combinedStringWithoutCRC);
         const completeQRString = combinedStringWithoutCRC + finalChecksum;
 
