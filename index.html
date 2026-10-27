@@ -150,14 +150,14 @@
 <body>
 
 <div class="app-container">
-    <h2>QRPh Universal le P2P Tool</h2>
+    <h2>QRPh Universal P2P Tool</h2>
     <div class="subtitle">Direct Mobile Routing Standard</div>
     
     <div id="hidden-reader"></div>
 
     <!-- 1. UPLOAD SECTION -->
     <div class="section">
-        <div class="section-title">1) Pumili ng QR Image (Auto-Filter & Extract)</div>
+        <div class="section-title">1) Pumili ng QR Image (Opsyonal para sa Pangalan)</div>
         <input type="file" id="qrUpload" accept="image/*">
         
         <button id="btnScanNow" class="btn-orange" type="button" style="display: none;">
@@ -178,8 +178,8 @@
         <label>• EditText 3 (Mobile Number Routing) - [EDITABLE]:</label>
         <input type="text" id="edit-text-3" value="639054946088" placeholder="Halimbawa: 639054946088">
         
-        <label>• EditText 4 (Pangalan at Lokasyon) - [EDITABLE]:</label>
-        <input type="text" id="edit-text-4" placeholder="Malinis na Tag 52 onwards...">
+        <label>• EditText 4 (Pangalan at Lokasyon - Auto-Filtered) - [EDITABLE]:</label>
+        <input type="text" id="edit-text-4" placeholder="Kusang mapupunan pagka-upload ng QR...">
         
         <label>• EditText 5 (Halaga / Amount) - [ANG EDITABLE PART]:</label>
         <input type="number" id="edit-text-5" placeholder="0.00" step="0.01">
@@ -231,19 +231,30 @@
 
         html5QrCode.scanFile(selectedFile, true)
             .then(qrCodeText => {
-                // REGEX SPLIT / FILTER: Hanapin ang Tag 52 sa kahit anong posisyon at gupitin ang lahat ng nasa unahan nito (tinatanggal ang mga lumang token)
-                let match = qrCodeText.match(/52\d{2}/);
-                if (match && match.index !== undefined) {
-                    let tag52Index = match.index;
-                    let crcIndex = qrCodeText.lastIndexOf("6304");
-                    if (crcIndex === -1) crcIndex = qrCodeText.length - 4;
+                let crcIndex = qrCodeText.lastIndexOf("6304");
+                if (crcIndex === -1) crcIndex = qrCodeText.length;
+                
+                // REGEX SPLIT / FILTER: Hanapin nang direkta ang Tag 52 na sumusunod sa standard merchant format (hal. 5204...)
+                // para maiwasan at matanggal ang anumang lumang token data sa unahan.
+                let match = qrCodeText.match(/5204\d{4}.*/);
+                if (match) {
+                    let cleanTag52Onwards = match[0].substring(0, crcIndex - (qrCodeText.indexOf(match[0])));
                     
-                    // Kunin lang ang malinis na simula sa Tag 52 hanggang bago ang CRC
-                    let extractedEt4 = qrCodeText.substring(tag52Index, crcIndex);
-                    document.getElementById('edit-text-4').value = extractedEt4;
-                    alert("Matagumpay na nasala at nakuha ang pangalan at lokasyon mula sa QR!");
+                    // Alisin ang posibleng sumunod na lumang CRC o ekstrang dulo bago ang tamang CRC code
+                    let finalCleanPart = cleanTag52Onwards.split("6304")[0];
+                    
+                    document.getElementById('edit-text-4').value = finalCleanPart;
+                    alert("Matagumpay na nasala at nakuha ang malinis na pangalan at lokasyon!");
                 } else {
-                    alert("Na-scan ang QR ngunit hindi natagpuan ang simula ng Tag 52.");
+                    // Fallback kung sakaling ibang variant ang format
+                    let tag52Index = qrCodeText.indexOf("52");
+                    if (tag52Index !== -1) {
+                        let extracted = qrCodeText.substring(tag52Index, crcIndex).split("6304")[0];
+                        document.getElementById('edit-text-4').value = extracted;
+                        alert("Nakuha ang detalye gamit ang fallback filter.");
+                    } else {
+                        alert("Hindi natagpuan ang tamang istruktura ng Tag 52 sa QR.");
+                    }
                 }
             })
             .catch(err => {
@@ -346,7 +357,7 @@
             amountTagFull = currencyTag;
         }
 
-        // Buong EMVCo string na walang CRC
+        // TAMANG EMVCo ORDER: Header + Tag 26 (P2P Mobile Routing) + Tag 52 onwards (et4) + Currency/Amount + CRC (6304)
         let combinedStringWithoutCRC = et1 + finalTag26 + et4 + amountTagFull + "6304";
         
         const finalChecksum = computeCRC16(combinedStringWithoutCRC);
