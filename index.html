@@ -254,33 +254,32 @@
             remaining = remaining.replace("5303608", "");
         }
 
-        // Hanapin ang Tag 27
+        // Hanapin ang Tag 27 nang eksakto
         let tag27Index = remaining.indexOf("27");
         if (tag27Index !== -1) {
-            let afterTag27 = remaining.substring(tag27Index + 4); 
-            
-            // Hanapin ang "com.p2pqrpay" para ligtas na masundan ang sub-tag 03
-            let p2pIndex = afterTag27.indexOf("com.p2pqrpay");
-            let et2 = afterTag27.substring(0, p2pIndex); // Kasama ang com.p2pqrpay at mga naunang maliliit na sub-tags
-            
-            // Maghanap ng "0315" simula sa p2pIndex para hindi magkamali ng saltok
-            let tag03Index = afterTag27.indexOf("0315", p2pIndex);
-            if (tag03Index === -1) {
-                tag03Index = afterTag27.indexOf("03", p2pIndex);
-            }
+            let tag27Len = parseInt(remaining.substring(tag27Index + 2, tag27Index + 4), 10);
+            let tag27Content = remaining.substring(tag27Index + 4, tag27Index + 4 + tag27Len);
+            let restOfTags = remaining.substring(tag27Index + 4 + tag27Len);
 
-            let afterEt2 = afterTag27.substring(tag03Index);
+            // Sa loob ng Tag 27 content, hanapin ang sub-tag 03 para sa routing parameter
+            let subTag03Index = tag27Content.indexOf("03");
+            let et2 = tag27Content.substring(0, subTag03Index); // Dito nasasama ang buong com.p2pqrpay... pati ang mga nauna rito
+            
+            let afterEt2 = tag27Content.substring(subTag03Index);
             let subTag03Len = parseInt(afterEt2.substring(2, 4), 10);
             let subTag03TotalLen = 4 + subTag03Len;
             let et3 = afterEt2.substring(4, subTag03TotalLen);
+            
             let afterEt3 = afterEt2.substring(subTag03TotalLen);
+            if (afterEt3.length > 0) {
+                let subTag04Len = parseInt(afterEt3.substring(2, 4), 10);
+                let subTag04TotalLen = 4 + subTag04Len;
+                savedSubTag04 = afterEt3.substring(0, subTag04TotalLen);
+            } else {
+                savedSubTag04 = "0417DWQM4TK3JDNWE4H9";
+            }
 
-            let subTag04Len = parseInt(afterEt3.substring(2, 4), 10);
-            let subTag04TotalLen = 4 + subTag04Len;
-            savedSubTag04 = afterEt3.substring(0, subTag04TotalLen);
-
-            let restOfTags = afterEt3.substring(subTag04TotalLen);
-
+            // Hanapin ang Tag 52 sa natitirang string
             let tag52Index = restOfTags.indexOf("52");
             if (tag52Index !== -1) {
                 let tag52Len = parseInt(restOfTags.substring(tag52Index + 2, tag52Index + 4), 10);
@@ -300,7 +299,7 @@
 
                 document.getElementById('edit-text-1').value = et1;
                 document.getElementById('edit-text-2').value = et2;
-                document.getElementById('edit-text-3').value = et3; // Dito na papasok nang tama ang routing token (hal. 217020000000656)
+                document.getElementById('edit-text-3').value = et3;
                 document.getElementById('edit-text-4').value = savedEt4Rest;
                 document.getElementById('edit-text-5').value = "";
                 document.getElementById('edit-text-6').value = et6;
@@ -379,6 +378,7 @@
             return;
         }
 
+        // Dinamikong kalkulahin ang haba ng sub-tag 03 at buong Tag 27 kasama ang tamang TLV length
         let subTag03LenStr = et3Val.length.toString().padStart(2, '0');
         let subTag03 = "03" + subTag03LenStr + et3Val;
 
@@ -440,7 +440,7 @@
         const imageURL = newCanvas.toDataURL("image/png");
         const a = document.createElement("a");
         a.href = imageURL;
-        a.download = "GCash_QR_Fixed_Parser.png";
+        a.download = "QRPh_Maya_Perfect.png";
         document.body.appendChild(a);
         a.click();
         document.body.removeChild(a);
