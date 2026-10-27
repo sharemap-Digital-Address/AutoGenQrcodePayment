@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>QRPh Tool (6 Fields Reverse & Generate)</title>
+    <title>QRPh Tool (Universal P2P Reverse & Generate)</title>
     
     <!-- Tamang QR Scanner Library (html5-qrcode) -->
     <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
@@ -150,8 +150,8 @@
 <body>
 
 <div class="app-container">
-    <h2>QRPh Tool2 (6 Fields)</h2>
-    <div class="subtitle">Universal P2P Standard with Mobile Number Routing</div>
+    <h2>QRPh Universal Tool</h2>
+    <div class="subtitle">Universal P2P Reverse & Generate with Mobile Routing</div>
     
     <div id="hidden-reader"></div>
 
@@ -172,13 +172,13 @@
         <label>• EditText 1 (Header/Format) - [Readonly]:</label>
         <input type="text" id="edit-text-1" placeholder="Naka-abang sa pagbasa..." readonly>
         
-        <label>• EditText 2 (Merchant Info Base) - [Readonly]:</label>
+        <label>• EditText 2 (Merchant/P2P Base) - [Readonly]:</label>
         <input type="text" id="edit-text-2" placeholder="Naka-abang sa pagbasa..." readonly>
         
-        <label>• EditText 3 (Phone Number Routing / Token) - [EDITABLE]:</label>
-        <input type="text" id="edit-text-3" placeholder="Ilagay ang mobile number (hal. 63905...)...">
+        <label>• EditText 3 (Phone Number / P2P Identifier) - [EDITABLE]:</label>
+        <input type="text" id="edit-text-3" placeholder="Halimbawa: 639054946088">
         
-        <label>• EditText 4 (Pangalan at Lokasyon) - [Readonly]:</label>
+        <label>• EditText 4 (Pangalan, Lokasyon at Extra Tags) - [Readonly]:</label>
         <input type="text" id="edit-text-4" placeholder="Naka-abang sa pagbasa..." readonly>
         
         <label>• EditText 5 (Halaga / Amount) - [ANG EDITABLE PART]:</label>
@@ -209,11 +209,8 @@
 
 <script>
     let selectedFile = null;
-    let savedTag26Prefix = ""; // Hal. "26420010ph.ppoc.p2p0111"
-    let savedTag26Suffix = ""; // Hal. "0203P2P" o katulad nito kung meron man
-    let savedTag52 = "52046016";
-    let savedCurrencyAndCountry = "53036085802PH";
-    let savedNameAndLocation = "";
+    let savedTag26Header = ""; // Halimbawa: 26420010ph.ppoc.p2p0111
+    let savedTag26Tail = "";   // Karagdagang sub-tags sa loob ng Tag 26 kung meron man
 
     document.getElementById('qrUpload').addEventListener('change', function(e) {
         const files = e.target.files;
@@ -236,7 +233,7 @@
 
         html5QrCode.scanFile(selectedFile, true)
             .then(qrCodeText => {
-                parseAndSplitTo6Fields(qrCodeText);
+                parseUniversalQR(qrCodeText);
                 alert("Matagumpay na na-reverse at na-autofill sa 6 na fields!");
             })
             .catch(err => {
@@ -245,75 +242,70 @@
             });
     });
 
-    function parseAndSplitTo6Fields(textToParse) {
-        let et1 = textToParse.substring(0, 12); // 000201010211
+    function parseUniversalQR(textToParse) {
+        let et1 = textToParse.substring(0, 12);
         let remaining = textToParse.substring(12);
         
-        // Linisin ang amount kung meron man
-        if (remaining.includes("54")) {
+        // Linisin ang lumang amount at currency kung meron man
+        if (remaining.includes("540")) {
             remaining = remaining.replace(/54\d{2}\d+\.\d{2}/, "");
         }
         if (remaining.includes("5303608")) {
             remaining = remaining.replace("5303608", "");
         }
 
-        // Suriin kung Tag 26 (P2P Universal) o Tag 27 (Merchant) ang ginamit
+        // Hanapin ang Tag 26 (Universal P2P Standard) o Tag 27 (Merchant)
         let tagIndex = remaining.indexOf("26");
-        if (tagIndex === -1) tagIndex = remaining.indexOf("27");
-
-        let tagLen = parseInt(remaining.substring(tagIndex + 2, tagIndex + 4), 10);
-        let tagContent = remaining.substring(tagIndex + 4, tagIndex + 4 + tagLen);
-        let restOfTags = remaining.substring(tagIndex + 4 + tagLen);
-
-        let et2 = "";
-        let et3 = "";
-
-        if (tagContent.includes("ph.ppoc.p2p")) {
-            // Universal P2P Format
-            let p2pIdx = tagContent.indexOf("0111");
-            et2 = tagContent.substring(0, p2pIdx + 4); // "26420010ph.ppoc.p2p0111"
-            let afterP2P = tagContent.substring(p2pIdx + 4);
-            
-            // Sub-tag 01 (Phone number)
-            let phoneLen = parseInt(afterP2P.substring(2, 4), 10);
-            et3 = afterP2P.substring(4, 4 + phoneLen);
-            savedTag26Suffix = afterP2P.substring(4 + phoneLen);
-        } else {
-            // Default fallback kung sakaling merchant format ang ma-scan
-            et2 = tagContent.substring(0, tagContent.indexOf("03"));
-            let afterEt2 = tagContent.substring(tagContent.indexOf("03"));
-            let subLen = parseInt(afterEt2.substring(2, 4), 10);
-            et3 = afterEt2.substring(4, 4 + subLen);
-            savedTag26Suffix = afterEt2.substring(4 + subLen);
+        if (tagIndex === -1) {
+            tagIndex = remaining.indexOf("27");
         }
 
-        // Hanapin ang Tag 52 o iba pang kasunod na tags
-        let tag52Idx = restOfTags.indexOf("52");
-        if (tag52Idx !== -1) {
-            let t52Len = parseInt(restOfTags.substring(tag52Idx + 2, tag52Idx + 4), 10);
-            savedTag52 = restOfTags.substring(tag52Idx, tag52Idx + 4 + t52Len);
-            let after52 = restOfTags.substring(tag52Idx + 4 + t52Len);
+        if (tagIndex !== -1) {
+            let tagLen = parseInt(remaining.substring(tagIndex + 2, tagIndex + 4), 10);
+            let tagContent = remaining.substring(tagIndex + 4, tagIndex + 4 + tagLen);
+            let restOfTags = remaining.substring(tagIndex + 4 + tagLen);
 
-            if (after52.startsWith("5303608")) {
-                after52 = after52.substring(7);
+            // Sa loob ng Tag 26/27, hanapin ang sub-tag 01 (Mobile Number / P2P Account Identifier)
+            let sub01Index = tagContent.indexOf("0111");
+            if (sub01Index === -1) sub01Index = tagContent.indexOf("01");
+
+            let et2 = tagContent.substring(0, sub01Index); // Halimbawa: 26420010ph.ppoc.p2p
+            let afterSub01 = tagContent.substring(sub01Index);
+            
+            let subLen = parseInt(afterSub01.substring(2, 4), 10);
+            let et3 = afterSub01.substring(4, 4 + subLen); // Mobile number o Routing token
+            let afterSub01Tail = afterSub01.substring(4 + subLen);
+            savedTag26Tail = afterSub01Tail;
+
+            // Hanapin ang Tag 52 sa natitirang string
+            let tag52Index = restOfTags.indexOf("52");
+            if (tag52Index !== -1) {
+                let tag52Len = parseInt(restOfTags.substring(tag52Index + 2, tag52Index + 4), 10);
+                let tag52TotalLen = 4 + tag52Len;
+                let savedTag52 = restOfTags.substring(tag52Index, tag52Index + tag52TotalLen);
+                let afterTag52 = restOfTags.substring(tag52Index + tag52TotalLen);
+
+                if (afterTag52.startsWith("5303608")) {
+                    afterTag52 = afterTag52.substring(7);
+                }
+
+                let crcIndex = afterTag52.indexOf("6304");
+                if (crcIndex === -1) crcIndex = afterTag52.length - 4;
+
+                let savedEt4Rest = savedTag52 + afterTag52.substring(0, crcIndex);
+                let et6 = afterTag52.substring(crcIndex);
+
+                document.getElementById('edit-text-1').value = et1;
+                document.getElementById('edit-text-2').value = et2;
+                document.getElementById('edit-text-3').value = et3;
+                document.getElementById('edit-text-4').value = savedEt4Rest;
+                document.getElementById('edit-text-5').value = "";
+                document.getElementById('edit-text-6').value = et6;
+            } else {
+                alert("Babala: Hindi natagpuan ang Tag 52.");
             }
-            if (after52.startsWith("5802PH")) {
-                after52 = after52.substring(6);
-            }
-
-            let crcIdx = after52.indexOf("6304");
-            if (crcIdx === -1) crcIdx = after52.length - 4;
-            savedNameAndLocation = after52.substring(0, crcIdx);
-            let et6 = after52.substring(crcIdx);
-
-            document.getElementById('edit-text-1').value = et1;
-            document.getElementById('edit-text-2').value = et2;
-            document.getElementById('edit-text-3').value = et3;
-            document.getElementById('edit-text-4').value = savedNameAndLocation;
-            document.getElementById('edit-text-5').value = "";
-            document.getElementById('edit-text-6').value = et6;
         } else {
-            alert("Babala: Hindi matagpuan ang Tag 52.");
+            alert("Babala: Hindi natagpuan ang Tag 26 o Tag 27.");
         }
     }
 
@@ -322,12 +314,19 @@
         const et3Val = document.getElementById('edit-text-3').value.trim();
         const et4 = document.getElementById('edit-text-4').value;
         
-        let subTagLenStr = et3Val.length.toString().padStart(2, '0');
-        let innerTag26 = et2 + subTagLenStr + et3Val + (savedTag26Suffix || "");
-        let tagLenStr = innerTag26.length.toString().padStart(2, '0');
-        let fullTag26 = "26" + tagLenStr + innerTag26;
+        let subLenStr = et3Val.length.toString().padStart(2, '0');
+        let subTag01 = "01" + subLenStr + et3Val;
 
-        const fullString = document.getElementById('edit-text-1').value + fullTag26 + savedTag52 + savedCurrencyAndCountry + savedNameAndLocation;
+        let innerTag = et2 + subTag01 + (savedTag26Tail || "");
+        let tagLenStr = innerTag.length.toString().padStart(2, '0');
+        let fullTag = "26" + tagLenStr + innerTag;
+
+        const fullString = document.getElementById('edit-text-1').value + fullTag + "5303608" + et4;
+
+        if(!fullString) {
+            alert("Walang QR data na babasahin. Mag-upload muna ng larawan.");
+            return;
+        }
 
         let name = "Hindi mahanap";
         let index = 0;
@@ -345,16 +344,15 @@
         
         const outputDiv = document.getElementById('accountInfoOutput');
         outputDiv.style.display = "block";
-        outputDiv.innerHTML = `<strong>Pangalan ng Account:</strong> ${name}\n<strong>Network/Routing:</strong> Universal QR Ph P2P (Mobile Number)\n<strong>Status:</strong> Handa na para sa universal generation.`;
+        outputDiv.innerHTML = `<strong>Pangalan ng Account:</strong> ${name}\n<strong>Network/Routing:</strong> Universal QRPh P2P\n<strong>Status:</strong> Handa nang gawan ng bagong presyo.`;
     });
 
     function computeCRC16(str) {
         let crc = 0xFFFF;
-        let code, i, j;
-        for (c = 0; c < str.length; c++) {
-            code = str.charCodeAt(c);
+        for (let c = 0; c < str.length; c++) {
+            let code = str.charCodeAt(c);
             crc ^= (code << 8);
-            for (i = 0; i < 8; i++) {
+            for (let i = 0; i < 8; i++) {
                 if ((crc & 0x8000) !== 0) {
                     crc = ((crc << 1) ^ 0x1021) & 0xFFFF;
                 } else {
@@ -378,24 +376,28 @@
             return;
         }
 
-        // Dinamikong kalkulahin ang haba ng sub-tag at buong Tag 26
-        let subTagLenStr = et3Val.length.toString().padStart(2, '0');
-        let subTagPhone = subTagLenStr + et3Val;
-        let innerTag26 = et2 + subTagPhone + (savedTag26Suffix || "");
-        let tagLenStr = innerTag26.length.toString().padStart(2, '0');
-        let finalTag26 = "26" + tagLenStr + innerTag26;
+        // Dinamikong kalkulahin ang haba para sa sub-tag at Tag 26
+        let subLenStr = et3Val.length.toString().padStart(2, '0');
+        let subTag01 = "01" + subLenStr + et3Val;
+
+        let innerTag = et2 + subTag01 + (savedTag26Tail || "");
+        let tagLenStr = innerTag.length.toString().padStart(2, '0');
+        let finalTag = "26" + tagLenStr + innerTag;
 
         let amountTagFull = "";
         let amount = parseFloat(et5);
+        let currencyTag = "5303608"; 
 
         if (!isNaN(amount) && amount > 0) {
             const amountStr = amount.toFixed(2);
             const lengthStr = amountStr.length.toString().padStart(2, '0');
-            amountTagFull = "54" + lengthStr + amountStr;
+            const tag54 = "54" + lengthStr + amountStr;
+            amountTagFull = currencyTag + tag54;
+        } else {
+            amountTagFull = currencyTag; 
         }
 
-        // Pagsasama ng buong EMVCo string sa tamang pagkakasunod-sunod
-        let combinedStringWithoutCRC = et1 + finalTag26 + savedTag52 + savedCurrencyAndCountry + amountTagFull + savedNameAndLocation + "6304";
+        let combinedStringWithoutCRC = et1 + finalTag + amountTagFull + et4 + "6304";
         
         const finalChecksum = computeCRC16(combinedStringWithoutCRC);
         const completeQRString = combinedStringWithoutCRC + finalChecksum;
@@ -436,7 +438,7 @@
         const imageURL = newCanvas.toDataURL("image/png");
         const a = document.createElement("a");
         a.href = imageURL;
-        a.download = "Universal_QRPh_P2P.png";
+        a.download = "QRPh_Universal_P2P.png";
         document.body.appendChild(a);
         a.click();
         document.body.removeChild(a);
