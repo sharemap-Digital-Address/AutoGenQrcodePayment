@@ -157,7 +157,7 @@
 
     <!-- 1. UPLOAD SECTION -->
     <div class="section">
-        <div class="section-title">1) Pumili ng QR Image (Opsyonal para sa Pangalan)</div>
+        <div class="section-title">1) Pumili ng QR Image (Auto-Filter & Extract)</div>
         <input type="file" id="qrUpload" accept="image/*">
         
         <button id="btnScanNow" class="btn-orange" type="button" style="display: none;">
@@ -179,7 +179,7 @@
         <input type="text" id="edit-text-3" value="639054946088" placeholder="Halimbawa: 639054946088">
         
         <label>• EditText 4 (Pangalan at Lokasyon) - [EDITABLE]:</label>
-        <input type="text" id="edit-text-4" placeholder="Halimbawa: 520460165802PH5910JA****E P.6012Ilayang Iyam61041234">
+        <input type="text" id="edit-text-4" placeholder="Malinis na Tag 52 onwards...">
         
         <label>• EditText 5 (Halaga / Amount) - [ANG EDITABLE PART]:</label>
         <input type="number" id="edit-text-5" placeholder="0.00" step="0.01">
@@ -231,16 +231,19 @@
 
         html5QrCode.scanFile(selectedFile, true)
             .then(qrCodeText => {
-                let tag52Index = qrCodeText.indexOf("52");
-                if (tag52Index !== -1) {
+                // REGEX SPLIT / FILTER: Hanapin ang Tag 52 sa kahit anong posisyon at gupitin ang lahat ng nasa unahan nito (tinatanggal ang mga lumang token)
+                let match = qrCodeText.match(/52\d{2}/);
+                if (match && match.index !== undefined) {
+                    let tag52Index = match.index;
                     let crcIndex = qrCodeText.lastIndexOf("6304");
                     if (crcIndex === -1) crcIndex = qrCodeText.length - 4;
-                    // Kunin mula Tag 52 hanggang bago ang CRC nang walang dalang lumang token
+                    
+                    // Kunin lang ang malinis na simula sa Tag 52 hanggang bago ang CRC
                     let extractedEt4 = qrCodeText.substring(tag52Index, crcIndex);
                     document.getElementById('edit-text-4').value = extractedEt4;
-                    alert("Matagumpay na nakuha ang pangalan at lokasyon mula sa QR!");
+                    alert("Matagumpay na nasala at nakuha ang pangalan at lokasyon mula sa QR!");
                 } else {
-                    alert("Na-scan ang QR ngunit hindi natagpuan ang tamang istruktura ng Tag 52.");
+                    alert("Na-scan ang QR ngunit hindi natagpuan ang simula ng Tag 52.");
                 }
             })
             .catch(err => {
@@ -314,7 +317,7 @@
     document.getElementById('btnGenerate').addEventListener('click', function() {
         let et1 = document.getElementById('edit-text-1').value; // 000201010211
         let et3 = document.getElementById('edit-text-3').value.trim(); // Mobile Number (e.g. 639054946088)
-        let et4 = document.getElementById('edit-text-4').value.trim(); // MCC + Name + City tags
+        let et4 = document.getElementById('edit-text-4').value.trim(); // Malinis na MCC + Name + City tags
         let et5 = document.getElementById('edit-text-5').value; // Amount
 
         if (!et3 || !et4) {
@@ -343,7 +346,7 @@
             amountTagFull = currencyTag;
         }
 
-        // TAMANG EMVCo ORDER: Header + Tag 26 (P2P) + Tag 52 onwards (et4) + Currency/Amount + CRC (6304)
+        // Buong EMVCo string na walang CRC
         let combinedStringWithoutCRC = et1 + finalTag26 + et4 + amountTagFull + "6304";
         
         const finalChecksum = computeCRC16(combinedStringWithoutCRC);
