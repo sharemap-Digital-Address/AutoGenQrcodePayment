@@ -97,7 +97,7 @@
     document.getElementById('qr-file').addEventListener('change', function(e) {
         if (e.target.files.length === 0) return;
         
-        cons/t html5QrCode = new Html5Qrcode("qr-reader-box");
+        const html5QrCode = new Html5Qrcode("qr-reader-box");
         const imageFile = e.target.files[0];
         
         document.getElementById('qr-reader-box').style.background = "#fff";
