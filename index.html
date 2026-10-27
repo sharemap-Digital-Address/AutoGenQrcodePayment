@@ -150,7 +150,7 @@
 <body>
 
 <div class="app-container">
-    <h2>QRPh Tool1 (6 Fields)</h2>
+    <h2>QRPh Tool (6 Fields)</h2>
     <div class="subtitle">Manual Reverse & Generate with Phone Routing</div>
     
     <div id="hidden-reader"></div>
@@ -178,7 +178,7 @@
         <label>• EditText 3 (Phone Number / Routing Parameter) - [EDITABLE]:</label>
         <input type="text" id="edit-text-3" placeholder="Naka-abang sa pagbasa...">
         
-        <label>• EditText 4 (Pangalan, Lokasyon at Extra Tags) - [Readonly]:</label>
+        <label>• EditText 4 (Pangalan, Lokasyon at Iba Pa) - [Readonly]:</label>
         <input type="text" id="edit-text-4" placeholder="Naka-abang sa pagbasa..." readonly>
         
         <label>• EditText 5 (Halaga / Amount) - [ANG EDITABLE PART]:</label>
@@ -209,9 +209,7 @@
 
 <script>
     let selectedFile = null;
-    let savedSubTag04 = "";
-    let savedTag52 = "";
-    let savedEt4Rest = "";
+    let coreDataWithoutAmount = "";
 
     document.getElementById('qrUpload').addEventListener('change', function(e) {
         const files = e.target.files;
@@ -244,63 +242,49 @@
     });
 
     function parseAndSplitTo6Fields(textToParse) {
-        let et1 = textToParse.substring(0, 12);
-        let remaining = textToParse.substring(12);
-        
-        if (remaining.includes("540")) {
-            remaining = remaining.replace(/54\d{2}\d+\.\d{2}/, "");
+        // Linisin muna ang lumang amount at currency kung meron man para makuha ang malinis na base string
+        let cleanText = textToParse;
+        if (cleanText.includes("540")) {
+            cleanText = cleanText.replace(/54\d{2}\d+\.\d{2}/, "");
         }
-        if (remaining.includes("5303608")) {
-            remaining = remaining.replace("5303608", "");
+        if (cleanText.includes("5303608")) {
+            cleanText = cleanText.replace("5303608", "");
         }
+
+        // Itabi ang base string na walang amount para pag-generate
+        coreDataWithoutAmount = cleanText.substring(0, cleanText.length - 4); // tanggal CRC sa dulo
+
+        let et1 = cleanText.substring(0, 12);
+        let remaining = cleanText.substring(12);
 
         let tag03Index = remaining.indexOf("0315");
         if (tag03Index === -1) tag03Index = 0;
 
-        let et2 = remaining.substring(0, tag03Index); 
+        let et2 = remaining.substring(0, tag03Index + 4); 
         let afterEt2 = remaining.substring(tag03Index + 4);
         
         let et3 = afterEt2.substring(0, 15);
         let afterEt3 = afterEt2.substring(15);
         
-        let subTag04Len = parseInt(afterEt3.substring(2, 4), 10);
-        let subTag04TotalLen = 4 + subTag04Len; 
-        savedSubTag04 = afterEt3.substring(0, subTag04TotalLen);
+        let crcIndex = afterEt3.indexOf("6304");
+        if (crcIndex === -1) crcIndex = afterEt3.length - 4;
         
-        let restOfTags = afterEt3.substring(subTag04TotalLen);
+        let et4 = afterEt3.substring(0, crcIndex);
+        let et6 = afterEt3.substring(crcIndex);
 
-        if (restOfTags.startsWith("52")) {
-            let tag52Len = parseInt(restOfTags.substring(2, 4), 10);
-            let tag52TotalLen = 4 + tag52Len;
-            savedTag52 = restOfTags.substring(0, tag52TotalLen); 
-            let afterTag52 = restOfTags.substring(tag52TotalLen);
-
-            if (afterTag52.startsWith("5303608")) {
-                afterTag52 = afterTag52.substring(7);
-            }
-
-            let crcIndex = afterTag52.indexOf("6304");
-            if (crcIndex === -1) crcIndex = afterTag52.length - 4;
-            
-            savedEt4Rest = afterTag52.substring(0, crcIndex);
-            let et6 = afterTag52.substring(crcIndex);
-
-            document.getElementById('edit-text-1').value = et1;
-            document.getElementById('edit-text-2').value = et2;
-            document.getElementById('edit-text-3').value = et3;
-            document.getElementById('edit-text-4').value = savedEt4Rest;
-            document.getElementById('edit-text-5').value = ""; 
-            document.getElementById('edit-text-6').value = et6;
-        } else {
-            alert("Babala: Hindi natagpuan ang simula ng Tag 52 sa QR string.");
-        }
+        document.getElementById('edit-text-1').value = et1;
+        document.getElementById('edit-text-2').value = et2;
+        document.getElementById('edit-text-3').value = et3;
+        document.getElementById('edit-text-4').value = et4;
+        document.getElementById('edit-text-5').value = ""; 
+        document.getElementById('edit-text-6').value = et6;
     }
 
     document.getElementById('btnDecode').addEventListener('click', function() {
         const et2 = document.getElementById('edit-text-2').value;
         const et3 = document.getElementById('edit-text-3').value;
         const et4 = document.getElementById('edit-text-4').value;
-        const fullString = et2 + "0315" + et3 + (savedSubTag04 || "") + (savedTag52 || "52046016") + "5303608" + et4;
+        const fullString = et2 + et3 + et4;
 
         if(!fullString) {
             alert("Walang QR data na babasahin. Mag-upload muna ng larawan.");
@@ -344,38 +328,54 @@
     }
 
     document.getElementById('btnGenerate').addEventListener('click', function() {
-        let et1 = document.getElementById('edit-text-1').value;
-        let et2 = document.getElementById('edit-text-2').value;
-        let et3 = document.getElementById('edit-text-3').value;
-        let et4 = document.getElementById('edit-text-4').value; 
         let et5 = document.getElementById('edit-text-5').value;
+        let amount = parseFloat(et5);
 
-        if (!et1 || !et3) {
-            alert("Kailangan ng laman ang EditText 1 at 3 para makapag-generate.");
-            return;
+        let basePayload = coreDataWithoutAmount;
+        if (!basePayload) {
+            // Fallback kung sakaling hindi nag-upload kundi nag-manual type
+            let et1 = document.getElementById('edit-text-1').value;
+            let et2 = document.getElementById('edit-text-2').value;
+            let et3 = document.getElementById('edit-text-3').value;
+            let et4 = document.getElementById('edit-text-4').value;
+            basePayload = et1 + et2 + et3 + et4;
         }
 
-        let amountTagFull = "";
-        let amount = parseFloat(et5);
-        let currencyTag = "5303608"; 
+        let completeQRString = "";
 
         if (!isNaN(amount) && amount > 0) {
+            // Kung may amount, isingit nang tumpak sa dulo (bago mag-CRC 6304) ayon sa tamang QRPh standard format
             const amountStr = amount.toFixed(2);
             const lengthStr = amountStr.length.toString().padStart(2, '0');
             const tag54 = "54" + lengthStr + amountStr;
-            amountTagFull = currencyTag + tag54;
+            const currencyTag = "5303608"; 
+
+            // Hanapin ang posisyon ng Tag 58 (Country '5802PH') para doon isingit ang Currency at Amount
+            let tag58Index = basePayload.indexOf("5802PH");
+            if (tag58Index !== -1) {
+                let partBefore58 = basePayload.substring(0, tag58Index);
+                let partAfter58 = basePayload.substring(tag58Index);
+                let stringWithoutCRC = partBefore58 + currencyTag + tag54 + partAfter58 + "6304";
+                let finalChecksum = computeCRC16(stringWithoutCRC);
+                completeQRString = stringWithoutCRC + finalChecksum;
+            } else {
+                let stringWithoutCRC = basePayload + currencyTag + tag54 + "6304";
+                let finalChecksum = computeCRC16(stringWithoutCRC);
+                completeQRString = stringWithoutCRC + finalChecksum;
+            }
         } else {
-            amountTagFull = currencyTag; 
+            // Kung walang amount, gamitin ang standard clean string
+            let stringWithoutCRC = basePayload + "6304";
+            let finalChecksum = computeCRC16(stringWithoutCRC);
+            completeQRString = stringWithoutCRC + finalChecksum;
         }
 
-        let combinedStringWithoutCRC = et1 + et2 + "0315" + et3 + (savedSubTag04 || "0417DWQM4TK3JDNWE4H9") + (savedTag52 || "52046016") + amountTagFull + et4 + "6304";
-        
-        const finalChecksum = computeCRC16(combinedStringWithoutCRC);
-        const completeQRString = combinedStringWithoutCRC + finalChecksum;
-
-        document.getElementById('edit-text-6').value = "6304" + finalChecksum;
+        // I-update ang EditText 6 at textarea
+        let newCRC = completeQRString.substring(completeQRString.length - 4);
+        document.getElementById('edit-text-6').value = "6304" + newCRC;
         document.getElementById("finalStringOutput").value = completeQRString;
 
+        // I-render ang QR Code
         document.getElementById("qrcode").innerHTML = "";
         new QRCode(document.getElementById("qrcode"), {
             text: completeQRString,
@@ -409,7 +409,7 @@
         const imageURL = newCanvas.toDataURL("image/png");
         const a = document.createElement("a");
         a.href = imageURL;
-        a.download = "GCash_QR_Perfect_Order.png";
+        a.download = "GCash_QR_Fixed.png";
         document.body.appendChild(a);
         a.click();
         document.body.removeChild(a);
