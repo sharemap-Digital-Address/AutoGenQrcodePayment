@@ -1,0 +1,396 @@
+<!DOCTYPE html>
+<html lang="tl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>QRPh Tool (6 Fields Reverse & Generate)</title>
+    
+    <!-- Tamang QR Scanner Library (html5-qrcode) -->
+    <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+    <!-- Tamang QR Code Generator Library (qrcodejs) -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+
+    <style>
+        body {
+            font-family: 'Segoe UI', Arial, sans-serif;
+            background-color: #0052cc;
+            margin: 0;
+            padding: 20px;
+            display: flex;
+            justify-content: center;
+        }
+        .app-container {
+            background-color: #ffffff;
+            max-width: 550px;
+            width: 100%;
+            padding: 25px;
+            border-radius: 16px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+            box-sizing: border-box;
+        }
+        h2 {
+            color: #0052cc;
+            text-align: center;
+            margin-top: 0;
+            margin-bottom: 5px;
+        }
+        .subtitle {
+            text-align: center;
+            color: #666;
+            font-size: 13px;
+            margin-bottom: 20px;
+        }
+        .section {
+            border: 1px solid #e0e0e0;
+            padding: 15px;
+            border-radius: 10px;
+            margin-bottom: 20px;
+            background-color: #f9f9f9;
+        }
+        .section-title {
+            font-weight: bold;
+            color: #333;
+            margin-bottom: 10px;
+            font-size: 14px;
+            text-transform: uppercase;
+        }
+        label {
+            font-size: 12px;
+            font-weight: bold;
+            color: #555;
+            display: block;
+            margin-top: 10px;
+        }
+        input[type="text"], input[type="number"], input[type="file"], textarea {
+            width: 100%;
+            padding: 10px;
+            margin-top: 5px;
+            border: 1px solid #ccc;
+            border-radius: 6px;
+            box-sizing: border-box;
+            font-size: 13px;
+            font-family: monospace;
+            background-color: #f9f9f9;
+        }
+        /* Espesyal na kulay para sa Editable Fields (EditText 3 at EditText 5) */
+        #edit-text-3, #edit-text-5 {
+            background-color: #ffffff !important;
+            border: 2px solid #0052cc !important;
+            font-weight: bold;
+            color: #0052cc;
+        }
+        textarea {
+            resize: vertical;
+            height: 60px;
+        }
+        button {
+            width: 100%;
+            color: white;
+            border: none;
+            padding: 12px;
+            font-size: 15px;
+            font-weight: bold;
+            border-radius: 6px;
+            cursor: pointer;
+            margin-top: 10px;
+            transition: background 0.2s;
+        }
+        .btn-blue {
+            background-color: #0052cc;
+        }
+        .btn-blue:hover {
+            background-color: #003d99;
+        }
+        .btn-orange {
+            background-color: #ff9800;
+        }
+        .btn-orange:hover {
+            background-color: #e68a00;
+        }
+        .btn-green {
+            background-color: #28a745;
+            margin-top: 15px;
+        }
+        .btn-green:hover {
+            background-color: #1e7e34;
+        }
+        .btn-gray {
+            background-color: #6c757d;
+            margin-top: 10px;
+        }
+        .btn-gray:hover {
+            background-color: #5a6268;
+        }
+        .result-box {
+            background-color: #e6f0ff;
+            padding: 10px;
+            border-radius: 6px;
+            margin-top: 10px;
+            font-size: 13px;
+            color: #003d99;
+            text-align: left;
+            white-space: pre-line;
+        }
+        .qr-output-container {
+            text-align: center;
+            margin-top: 20px;
+        }
+        #qrcode {
+            display: inline-block;
+            background: white;
+            padding: 20px;
+            border: 1px solid #ddd;
+            border-radius: 12px;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.05);
+        }
+        #hidden-reader {
+            display: none;
+        }
+    </style>
+</head>
+<body>
+
+<div class="app-container">
+    <h2>QRPh Tools (6 Fields)</h2>
+    <div class="subtitle">Manual Reverse & Generate with Phone Routing</div>
+    
+    <div id="hidden-reader"></div>
+
+    <!-- 1. UPLOAD SECTION -->
+    <div class="section">
+        <div class="section-title">1) Pumili ng QR Image</div>
+        <input type="file" id="qrUpload" accept="image/*">
+        
+        <button id="btnScanNow" class="btn-orange" type="button" style="display: none;">
+            Basahin ang QR Code
+        </button>
+    </div>
+
+    <!-- 2. ANG 6 NA EDITTEXT FIELDS -->
+    <div class="section">
+        <div class="section-title">2) 6 Na Bahagi ng QR String</div>
+        
+        <label>• EditText 1 (Header/Format) - [Readonly]:</label>
+        <input type="text" id="edit-text-1" placeholder="Naka-abang sa pagbasa..." readonly>
+        
+        <label>• EditText 2 (Merchant Info Base) - [Readonly]:</label>
+        <input type="text" id="edit-text-2" placeholder="Naka-abang sa pagbasa..." readonly>
+        
+        <label>• EditText 3 (Phone Number / Routing Parameter) - [EDITABLE]:</label>
+        <input type="text" id="edit-text-3" placeholder="Naka-abang sa pagbasa...">
+        
+        <label>• EditText 4 (Pangalan at Lokasyon) - [Readonly]:</label>
+        <input type="text" id="edit-text-4" placeholder="Naka-abang sa pagbasa..." readonly>
+        
+        <label>• EditText 5 (Halaga / Amount) - [ANG EDITABLE PART]:</label>
+        <input type="number" id="edit-text-5" placeholder="0.00" step="0.01">
+        
+        <label>• EditText 6 (CRC Checksum) - [Auto-updated]:</label>
+        <input type="text" id="edit-text-6" placeholder="Naka-abang sa pagbasa..." readonly>
+    </div>
+
+    <!-- 3. DECODE ACCOUNT INFO BUTTON -->
+    <button id="btnDecode" class="btn-blue" type="button">I-decode ang Impormasyon ng Account</button>
+    <div id="accountInfoOutput" class="result-box" style="display: none;"></div>
+
+    <!-- 4. GENERATE NEW QR BUTTON -->
+    <button id="btnGenerate" class="btn-green" type="button">2. Generate Bagong QR Code</button>
+    
+    <!-- RESULT STRING & DOWNLOAD -->
+    <div style="margin-top: 15px;">
+        <label>Buong QR String na may CRC Hash:</label>
+        <textarea id="finalStringOutput" readonly placeholder="Lilitaw dito ang nabuong QR string..."></textarea>
+    </div>
+
+    <div class="qr-output-container">
+        <div id="qrcode"></div>
+        <button id="btnDownload" class="btn-gray" type="button" style="display: none;">I-download ang QR Image (May Quiet Zone)</button>
+    </div>
+</div>
+
+<script>
+    let selectedFile = null;
+
+    document.getElementById('qrUpload').addEventListener('change', function(e) {
+        const files = e.target.files;
+        if (files && files.length > 0) {
+            selectedFile = files[0];
+            document.getElementById('btnScanNow').style.display = 'block';
+        } else {
+            selectedFile = null;
+            document.getElementById('btnScanNow').style.display = 'none';
+        }
+    });
+
+    document.getElementById('btnScanNow').addEventListener('click', function() {
+        if (!selectedFile) {
+            alert("Mangyaring pumili muna ng larawan.");
+            return;
+        }
+
+        const html5QrCode = new Html5Qrcode("hidden-reader");
+
+        html5QrCode.scanFile(selectedFile, true)
+            .then(qrCodeText => {
+                parseAndSplitTo6Fields(qrCodeText);
+                alert("Matagumpay na na-reverse at na-autofill sa 6 na fields!");
+            })
+            .catch(err => {
+                alert("Hindi mabasa ang QR sa piniling larawan. Siguraduhing malinaw ang QR code.");
+                console.error(err);
+            });
+    });
+
+    function parseAndSplitTo6Fields(textToParse) {
+        let et1 = textToParse.substring(0, 12);
+        let remaining = textToParse.substring(12);
+        
+        // Alisin ang lumang amount kung meron man para hindi sumobra
+        if (remaining.includes("540")) {
+            remaining = remaining.replace(/54\d{2}\d+\.\d{2}/, "");
+        }
+
+        let tag03Index = remaining.indexOf("0315");
+        if (tag03Index === -1) tag03Index = 0;
+
+        let et2 = remaining.substring(0, tag03Index + 4); 
+        let afterEt2 = remaining.substring(tag03Index + 4);
+        
+        let et3 = afterEt2.substring(0, 15);
+        let afterEt3 = afterEt2.substring(15);
+        
+        let crcIndex = afterEt3.indexOf("6304");
+        if (crcIndex === -1) crcIndex = afterEt3.length - 4;
+        
+        let et4 = afterEt3.substring(0, crcIndex);
+        let et6 = afterEt3.substring(crcIndex);
+
+        document.getElementById('edit-text-1').value = et1;
+        document.getElementById('edit-text-2').value = et2;
+        document.getElementById('edit-text-3').value = et3; // Dito mo pwede palitan kung nais mo i-test ang mobile number format
+        document.getElementById('edit-text-4').value = et4;
+        document.getElementById('edit-text-5').value = ""; 
+        document.getElementById('edit-text-6').value = et6;
+    }
+
+    document.getElementById('btnDecode').addEventListener('click', function() {
+        const et2 = document.getElementById('edit-text-2').value;
+        const et3 = document.getElementById('edit-text-3').value;
+        const et4 = document.getElementById('edit-text-4').value;
+        const fullString = et2 + et3 + et4;
+
+        if(!fullString) {
+            alert("Walang QR data na babasahin. Mag-upload muna ng larawan.");
+            return;
+        }
+
+        let name = "Hindi mahanap";
+        let index = 0;
+        while (index < fullString.length) {
+            let tag = fullString.substring(index, index + 2);
+            let len = parseInt(fullString.substring(index + 2, index + 4), 10);
+            if (isNaN(len)) break;
+            let val = fullString.substring(index + 4, index + 4 + len);
+            if (tag === "59") {
+                name = val;
+                break;
+            }
+            index = index + 4 + len;
+        }
+        
+        const outputDiv = document.getElementById('accountInfoOutput');
+        outputDiv.style.display = "block";
+        outputDiv.innerHTML = `<strong>Pangalan ng Account:</strong> ${name}\n<strong>Network/Routing:</strong> InstaPay (QRPh)\n<strong>Status:</strong> Handa nang gawan ng bagong presyo.`;
+    });
+
+    function computeCRC16(str) {
+        let crc = 0xFFFF;
+        for (let c = 0; c < str.length; c++) {
+            let code = str.charCodeAt(c);
+            crc ^= (code << 8);
+            for (let i = 0; i < 8; i++) {
+                if ((crc & 0x8000) !== 0) {
+                    crc = ((crc << 1) ^ 0x1021) & 0xFFFF;
+                } else {
+                    crc = (crc << 1) & 0xFFFF;
+                }
+            }
+        }
+        let hex = crc.toString(16).toUpperCase();
+        return hex.padStart(4, '0');
+    }
+
+    document.getElementById('btnGenerate').addEventListener('click', function() {
+        let et1 = document.getElementById('edit-text-1').value;
+        let et2 = document.getElementById('edit-text-2').value;
+        let et3 = document.getElementById('edit-text-3').value;
+        let et4 = document.getElementById('edit-text-4').value;
+        let et5 = document.getElementById('edit-text-5').value;
+
+        if (!et1 || !et3) {
+            alert("Kailangan ng laman ang EditText 1 at 3 para makapag-generate.");
+            return;
+        }
+
+        let amountTagFull = "";
+        let amount = parseFloat(et5);
+
+        // Kung may nilagay na amount (tulad ng 40 pesos), idagdag ang Currency (53) at Amount (54)
+        if (!isNaN(amount) && amount > 0) {
+            const amountStr = amount.toFixed(2);
+            const lengthStr = amountStr.length.toString().padStart(2, '0');
+            const tag54 = "54" + lengthStr + amountStr;
+            const currencyTag = "5303608"; 
+            amountTagFull = currencyTag + tag54;
+        }
+
+        // Pagsasama ng mga bahagi sa tamang pagkakasunod-sunod
+        let combinedStringWithoutCRC = et1 + et2 + et3 + amountTagFull + et4 + "6304";
+        const finalChecksum = computeCRC16(combinedStringWithoutCRC);
+        const completeQRString = combinedStringWithoutCRC + finalChecksum;
+
+        document.getElementById('edit-text-6').value = "6304" + finalChecksum;
+        document.getElementById("finalStringOutput").value = completeQRString;
+
+        document.getElementById("qrcode").innerHTML = "";
+        new QRCode(document.getElementById("qrcode"), {
+            text: completeQRString,
+            width: 300,
+            height: 300,
+            colorDark : "#000000",
+            colorLight : "#ffffff",
+            correctLevel : QRCode.CorrectLevel.H
+        });
+
+        document.getElementById("btnDownload").style.display = "block";
+    });
+
+    document.getElementById('btnDownload').addEventListener('click', function() {
+        const sourceCanvas = document.querySelector("#qrcode canvas");
+        if (!sourceCanvas) {
+            alert("Wala pang QR code na naka-generate.");
+            return;
+        }
+
+        const padding = 40;
+        const newCanvas = document.createElement('canvas');
+        newCanvas.width = sourceCanvas.width + (padding * 2);
+        newCanvas.height = sourceCanvas.height + (padding * 2);
+        const ctx = newCanvas.getContext('2d');
+
+        ctx.fillStyle = "#ffffff";
+        ctx.fillRect(0, 0, newCanvas.width, newCanvas.height);
+        ctx.drawImage(sourceCanvas, padding, padding);
+
+        const imageURL = newCanvas.toDataURL("image/png");
+        const a = document.createElement("a");
+        a.href = imageURL;
+        a.download = "GCash_QR_With_Amount.png";
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+    });
+</script>
+
+</body>
+</html>
