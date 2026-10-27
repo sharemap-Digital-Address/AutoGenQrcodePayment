@@ -150,7 +150,7 @@
 <body>
 
 <div class="app-container">
-    <h2>QRPh Universal P2P Tool</h2>
+    <h2>QRPh Universals P2P Tool</h2>
     <div class="subtitle">Direct Mobile Routing Standard</div>
     
     <div id="hidden-reader"></div>
@@ -234,22 +234,20 @@
                 let crcIndex = qrCodeText.lastIndexOf("6304");
                 if (crcIndex === -1) crcIndex = qrCodeText.length;
                 
-                // REGEX SPLIT / FILTER: Hanapin nang direkta ang Tag 52 na sumusunod sa standard merchant format (hal. 5204...)
-                // para maiwasan at matanggal ang anumang lumang token data sa unahan.
                 let match = qrCodeText.match(/5204\d{4}.*/);
                 if (match) {
                     let cleanTag52Onwards = match[0].substring(0, crcIndex - (qrCodeText.indexOf(match[0])));
-                    
-                    // Alisin ang posibleng sumunod na lumang CRC o ekstrang dulo bago ang tamang CRC code
                     let finalCleanPart = cleanTag52Onwards.split("6304")[0];
+                    
+                    // Siguraduhing tanggalin ang posibleng lumang currency tag na kasama sa na-scan kung sakali
+                    finalCleanPart = finalCleanPart.replace("5303608", "");
                     
                     document.getElementById('edit-text-4').value = finalCleanPart;
                     alert("Matagumpay na nasala at nakuha ang malinis na pangalan at lokasyon!");
                 } else {
-                    // Fallback kung sakaling ibang variant ang format
                     let tag52Index = qrCodeText.indexOf("52");
                     if (tag52Index !== -1) {
-                        let extracted = qrCodeText.substring(tag52Index, crcIndex).split("6304")[0];
+                        let extracted = qrCodeText.substring(tag52Index, crcIndex).split("6304")[0].replace("5303608", "");
                         document.getElementById('edit-text-4').value = extracted;
                         alert("Nakuha ang detalye gamit ang fallback filter.");
                     } else {
@@ -345,20 +343,18 @@
         let tag26LenStr = innerTag26.length.toString().padStart(2, '0');
         let finalTag26 = "26" + tag26LenStr + innerTag26;
 
-        let currencyTag = "5303608";
-        let amountTagFull = "";
+        let currencyTag = "5303608"; // ISO Currency PHP (53)
+        let amountPart = "";
         let amount = parseFloat(et5);
 
         if (!isNaN(amount) && amount > 0) {
             const amountStr = amount.toFixed(2);
             const lengthStr = amountStr.length.toString().padStart(2, '0');
-            amountTagFull = currencyTag + "54" + lengthStr + amountStr;
-        } else {
-            amountTagFull = currencyTag;
+            amountPart = "54" + lengthStr + amountStr; // Amount Tag (54)
         }
 
-        // TAMANG EMVCo ORDER: Header + Tag 26 (P2P Mobile Routing) + Tag 52 onwards (et4) + Currency/Amount + CRC (6304)
-        let combinedStringWithoutCRC = et1 + finalTag26 + et4 + amountTagFull + "6304";
+        // Ligtas at malinis na pagkakasunod-sunod: Header + Tag 26 + Tag 52 onwards (et4) + Currency (53) + Amount (54 kung meron) + CRC (6304)
+        let combinedStringWithoutCRC = et1 + finalTag26 + et4 + currencyTag + amountPart + "6304";
         
         const finalChecksum = computeCRC16(combinedStringWithoutCRC);
         const completeQRString = combinedStringWithoutCRC + finalChecksum;
