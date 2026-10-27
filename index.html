@@ -178,8 +178,8 @@
         <label>• EditText 3 (Mobile Number Routing) - [EDITABLE]:</label>
         <input type="text" id="edit-text-3" value="639054946088" placeholder="Halimbawa: 639054946088">
         
-        <label>• EditText 4 (Pangalan, Lokasyon at P2P Extra Tag) - [EDITABLE/Readonly]:</label>
-        <input type="text" id="edit-text-4" value="0203P2P5802PH5910JA****E P.6012Ilayang Iyam61041234" placeholder="Pangalan at Address...">
+        <label>• EditText 4 (Pangalan at Lokasyon) - [EDITABLE]:</label>
+        <input type="text" id="edit-text-4" placeholder="Halimbawa: 520460165802PH5910JA****E P.6012Ilayang Iyam61041234">
         
         <label>• EditText 5 (Halaga / Amount) - [ANG EDITABLE PART]:</label>
         <input type="number" id="edit-text-5" placeholder="0.00" step="0.01">
@@ -231,16 +231,16 @@
 
         html5QrCode.scanFile(selectedFile, true)
             .then(qrCodeText => {
-                // Kunin lang ang Tag 52 hanggang bago ang CRC mula sa in-upload na QR para makuha ang pangalan at lokasyon
                 let tag52Index = qrCodeText.indexOf("52");
                 if (tag52Index !== -1) {
                     let crcIndex = qrCodeText.lastIndexOf("6304");
                     if (crcIndex === -1) crcIndex = qrCodeText.length - 4;
-                    let extractedEt4 = "0203P2P" + qrCodeText.substring(tag52Index, crcIndex);
+                    // Kunin mula Tag 52 hanggang bago ang CRC nang walang dalang lumang token
+                    let extractedEt4 = qrCodeText.substring(tag52Index, crcIndex);
                     document.getElementById('edit-text-4').value = extractedEt4;
                     alert("Matagumpay na nakuha ang pangalan at lokasyon mula sa QR!");
                 } else {
-                    alert("Na-scan ang QR ngunit hindi natagpuan ang tamang istruktura.");
+                    alert("Na-scan ang QR ngunit hindi natagpuan ang tamang istruktura ng Tag 52.");
                 }
             })
             .catch(err => {
@@ -251,11 +251,29 @@
 
     document.getElementById('btnDecode').addEventListener('click', function() {
         const et1 = document.getElementById('edit-text-1').value;
-        const et2 = document.getElementById('edit-text-2').value;
         const et3 = document.getElementById('edit-text-3').value.trim();
         const et4 = document.getElementById('edit-text-4').value;
-        
-        let fullString = et1 + et2 + et3 + "5303608" + et4;
+        const et5 = document.getElementById('edit-text-5').value;
+
+        let subLenStr = et3.length.toString().padStart(2, '0');
+        let subTag01 = "01" + subLenStr + et3;
+
+        let innerTag26 = "0010ph.ppoc.p2p" + subTag01;
+        let tag26LenStr = innerTag26.length.toString().padStart(2, '0');
+        let finalTag26 = "26" + tag26LenStr + innerTag26;
+
+        let currencyTag = "5303608";
+        let amountTagFull = "";
+        let amount = parseFloat(et5);
+        if (!isNaN(amount) && amount > 0) {
+            const amountStr = amount.toFixed(2);
+            const lengthStr = amountStr.length.toString().padStart(2, '0');
+            amountTagFull = currencyTag + "54" + lengthStr + amountStr;
+        } else {
+            amountTagFull = currencyTag;
+        }
+
+        let fullString = et1 + finalTag26 + et4 + amountTagFull;
 
         let name = "Hindi mahanap";
         let index = 0;
@@ -273,7 +291,7 @@
         
         const outputDiv = document.getElementById('accountInfoOutput');
         outputDiv.style.display = "block";
-        outputDiv.innerHTML = `<strong>Pangalan ng Account:</strong> ${name}\n<strong>Routing Type:</strong> Mobile Number (Universal P2P)\n<strong>Status:</strong> Handa nang gawan ng QR.`;
+        outputDiv.innerHTML = `<strong>Pangalan ng Account:</strong> ${name}\n<strong>Routing Type:</strong> Mobile Number (Universal P2P)\n<strong>Status:</strong> Handa na.`;
     });
 
     function computeCRC16(str) {
@@ -295,15 +313,23 @@
 
     document.getElementById('btnGenerate').addEventListener('click', function() {
         let et1 = document.getElementById('edit-text-1').value; // 000201010211
-        let et2 = document.getElementById('edit-text-2').value; // 26420010ph.ppoc.p2p0111
         let et3 = document.getElementById('edit-text-3').value.trim(); // Mobile Number (e.g. 639054946088)
-        let et4 = document.getElementById('edit-text-4').value; // Pangalan at lokasyon
+        let et4 = document.getElementById('edit-text-4').value.trim(); // MCC + Name + City tags
         let et5 = document.getElementById('edit-text-5').value; // Amount
 
-        if (!et3) {
-            alert("Kailangan ng laman ang EditText 3 (Mobile Number).");
+        if (!et3 || !et4) {
+            alert("Kailangan ng laman ang Mobile Number at Pangalan/Lokasyon (EditText 3 at 4).");
             return;
         }
+
+        // Dinamikong kalkulahin ang haba ng mobile number para sa sub-tag 01
+        let subLenStr = et3.length.toString().padStart(2, '0');
+        let subTag01 = "01" + subLenStr + et3;
+
+        // Buuin ang loob ng Tag 26 at kalkulahin ang haba nito nang dinamiko
+        let innerTag26 = "0010ph.ppoc.p2p" + subTag01;
+        let tag26LenStr = innerTag26.length.toString().padStart(2, '0');
+        let finalTag26 = "26" + tag26LenStr + innerTag26;
 
         let currencyTag = "5303608";
         let amountTagFull = "";
@@ -317,8 +343,8 @@
             amountTagFull = currencyTag;
         }
 
-        // Pagsasama nang walang CRC
-        let combinedStringWithoutCRC = et1 + et2 + et3 + amountTagFull + et4 + "6304";
+        // TAMANG EMVCo ORDER: Header + Tag 26 (P2P) + Tag 52 onwards (et4) + Currency/Amount + CRC (6304)
+        let combinedStringWithoutCRC = et1 + finalTag26 + et4 + amountTagFull + "6304";
         
         const finalChecksum = computeCRC16(combinedStringWithoutCRC);
         const completeQRString = combinedStringWithoutCRC + finalChecksum;
