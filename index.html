@@ -150,7 +150,7 @@
 <body>
 
 <div class="app-container">
-    <h2>QRPh Tool2 (6 Fields)</h2>
+    <h2>QRPh Tool (6 Fields)</h2>
     <div class="subtitle">Manual Reverse & Generate with Phone Routing</div>
     
     <div id="hidden-reader"></div>
@@ -176,7 +176,7 @@
         <input type="text" id="edit-text-2" placeholder="Naka-abang sa pagbasa..." readonly>
         
         <label>• EditText 3 (Phone Number / Routing Parameter) - [EDITABLE]:</label>
-        <input type="text" id="edit-text-3" placeholder="Naka-abang sa pagbasa...">
+        <input type="text" id="edit-text-3" placeholder="Ilagay ang Token o Mobile Number...">
         
         <label>• EditText 4 (Pangalan, Lokasyon at Extra Tags) - [Readonly]:</label>
         <input type="text" id="edit-text-4" placeholder="Naka-abang sa pagbasa..." readonly>
@@ -247,7 +247,6 @@
         let et1 = textToParse.substring(0, 12);
         let remaining = textToParse.substring(12);
         
-        // Linisin ang lumang amount at currency kung meron man para hindi magdoble
         if (remaining.includes("540")) {
             remaining = remaining.replace(/54\d{2}\d+\.\d{2}/, "");
         }
@@ -255,23 +254,24 @@
             remaining = remaining.replace("5303608", "");
         }
 
-        let tag03Index = remaining.indexOf("0315");
+        let tag03Index = remaining.indexOf("03");
         if (tag03Index === -1) tag03Index = 0;
 
         let et2 = remaining.substring(0, tag03Index); 
-        let afterEt2 = remaining.substring(tag03Index + 4);
+        let afterEt2 = remaining.substring(tag03Index);
         
-        let et3 = afterEt2.substring(0, 15);
-        let afterEt3 = afterEt2.substring(15);
+        // Kunin ang haba ng sub-tag 03 nang dinamiko
+        let subTag03Len = parseInt(afterEt2.substring(2, 4), 10);
+        let subTag03TotalLen = 4 + subTag03Len;
+        let et3 = afterEt2.substring(4, subTag03TotalLen); // Nilalaman ng EditText 3 (Token o Phone Number)
+        let afterEt3 = afterEt2.substring(subTag03TotalLen);
         
-        // Kunin ang sub-tag 04 (User ID token) para masigurong buo ang Tag 27
         let subTag04Len = parseInt(afterEt3.substring(2, 4), 10);
         let subTag04TotalLen = 4 + subTag04Len; 
         savedSubTag04 = afterEt3.substring(0, subTag04TotalLen);
         
         let restOfTags = afterEt3.substring(subTag04TotalLen);
 
-        // Hanapin ang Tag 52 (MCC)
         if (restOfTags.startsWith("52")) {
             let tag52Len = parseInt(restOfTags.substring(2, 4), 10);
             let tag52TotalLen = 4 + tag52Len;
@@ -301,9 +301,17 @@
 
     document.getElementById('btnDecode').addEventListener('click', function() {
         const et2 = document.getElementById('edit-text-2').value;
-        const et3 = document.getElementById('edit-text-3').value;
+        const et3Val = document.getElementById('edit-text-3').value.trim();
         const et4 = document.getElementById('edit-text-4').value;
-        const fullString = et2 + "0315" + et3 + (savedSubTag04 || "") + (savedTag52 || "52046016") + "5303608" + et4;
+        
+        let subTag03LenStr = et3Val.length.toString().padStart(2, '0');
+        let subTag03 = "03" + subTag03LenStr + et3Val;
+
+        let innerTag27 = et2 + subTag03 + (savedSubTag04 || "");
+        let tag27LenStr = innerTag27.length.toString().padStart(2, '0');
+        let fullTag27 = "27" + tag27LenStr + innerTag27;
+
+        const fullString = document.getElementById('edit-text-1').value + fullTag27 + (savedTag52 || "52046016") + "5303608" + et4;
 
         if(!fullString) {
             alert("Walang QR data na babasahin. Mag-upload muna ng larawan.");
@@ -348,23 +356,29 @@
 
     document.getElementById('btnGenerate').addEventListener('click', function() {
         let et1 = document.getElementById('edit-text-1').value;
-        let et2 = document.getElementById('edit-text-2').value;
-        let et3 = document.getElementById('edit-text-3').value;
+        let et2 = document.getElementById('edit-text-2').value; // Merchant base info (com.p2pqrpay...)
+        let et3Val = document.getElementById('edit-text-3').value.trim(); // Dito mo pwedeng palitan ng phone number o token
         let et4 = document.getElementById('edit-text-4').value; 
         let et5 = document.getElementById('edit-text-5').value;
 
-        if (!et1 || !et3) {
+        if (!et1 || !et3Val) {
             alert("Kailangan ng laman ang EditText 1 at 3 para makapag-generate.");
             return;
         }
+
+        // Dinamikong kalkulahin ang haba ng EditText 3 para sa sub-tag 03
+        let subTag03LenStr = et3Val.length.toString().padStart(2, '0');
+        let subTag03 = "03" + subTag03LenStr + et3Val;
+
+        // Buuin ang loob ng Tag 27 at awtomatikong kalkulahin ang kabuuang haba nito
+        let innerTag27 = et2 + subTag03 + (savedSubTag04 || "0417DWQM4TK3JDNWE4H9");
+        let tag27LenStr = innerTag27.length.toString().padStart(2, '0');
+        let finalTag27 = "27" + tag27LenStr + innerTag27;
 
         let amountTagFull = "";
         let amount = parseFloat(et5);
         let currencyTag = "5303608"; // Standard PHP Currency
 
-        // STRICT EMVCo ORDER:
-        // Tag 27 is closed completely after savedSubTag04.
-        // Then Tag 52 (MCC), followed by Currency (53) and Amount (54) BEFORE Country (58) / et4.
         if (!isNaN(amount) && amount > 0) {
             const amountStr = amount.toFixed(2);
             const lengthStr = amountStr.length.toString().padStart(2, '0');
@@ -374,7 +388,8 @@
             amountTagFull = currencyTag; 
         }
 
-        let combinedStringWithoutCRC = et1 + et2 + "0315" + et3 + (savedSubTag04 || "0417DWQM4TK3JDNWE4H9") + (savedTag52 || "52046016") + amountTagFull + et4 + "6304";
+        // Pagsasama ng buong EMVCo string sa tamang pagkakasunod-sunod at may dynamic lengths
+        let combinedStringWithoutCRC = et1 + finalTag27 + (savedTag52 || "52046016") + amountTagFull + et4 + "6304";
         
         const finalChecksum = computeCRC16(combinedStringWithoutCRC);
         const completeQRString = combinedStringWithoutCRC + finalChecksum;
@@ -396,6 +411,7 @@
     });
 
     document.getElementById('btnDownload').addEventListener('click', function() {
+        pangs:
         const sourceCanvas = document.querySelector("#qrcode canvas");
         if (!sourceCanvas) {
             alert("Wala pang QR code na naka-generate.");
@@ -415,7 +431,7 @@
         const imageURL = newCanvas.toDataURL("image/png");
         const a = document.createElement("a");
         a.href = imageURL;
-        a.download = "GCash_QR_Fixed.png";
+        a.download = "GCash_QR_Dynamic_Length.png";
         document.body.appendChild(a);
         a.click();
         document.body.removeChild(a);
