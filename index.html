@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>QRPh Tool2 (6 Fields)</title>
-    <!-- Mga kinakailangang library para sa pag-scan at pag-generate ng QR -->
+    <!-- Essential libraries for QR decoding and encoding -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html5-qrcode/2.3.8/html5-qrcode.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
     <style>
@@ -30,7 +30,7 @@
 <body>
 
 <div class="container">
-    <h2>QRPh Tool (6 Fields)</h2>
+    <h2>QRPh Tool2 (6 Fields)</h2>
     <div class="subtitle">Manual Reverse & Generate with Phone Routing</div>
     
     <!-- 1) PUMILI NG QR IMAGE -->
@@ -38,7 +38,7 @@
         <label for="qr-file" style="cursor: pointer; display: block; margin: 0; font-size: 15px;">
             📸 1) Pumili ng QR Image (Basahin ang QR Code)
         </label>
-        <input type="file" id="qr-file" accept="image/*" style="display: none;">
+        <input type="file" id="qr-file" accept="image/*">
     </div>
 
     <button id="btn-decode" class="btn-decode">I-decode ang Impormasyon ng Account</button>
@@ -62,7 +62,7 @@
     </div>
 
     <div class="form-group">
-        <label>• EditText 4 (Pangalan, Lokasyon at Extra Tags) - [Readonly]:</label>
+        <label>• EditText 4 (Identity Tokens at Data Tags) - [Readonly]:</label>
         <input type="text" id="edit-text-4" placeholder="Awtomatikong mapupunan..." readonly>
     </div>
 
@@ -82,7 +82,7 @@
     <!-- 4) OUTPUT DISPLAY -->
     <div id="result-qr-container">
         <h3 style="color: #155724; margin-top: 0;">Buong QR String na may CRC Hash:</h3>
-        <input type="text" id="final-string-output" readonly style="background-color: #fff; text-align: center; font-family: monospace; font-size: 12px; margin-bottom: 15px;">
+        <input type="text" id="final-string-output" readonly style="background-color: #fff; text-align: center; font-family: monospace; font-size: 12px; margin-bottom: 15px; width: 100%;">
         <div>
             <div id="qrcode"></div>
         </div>
@@ -92,8 +92,9 @@
 
 <script>
     let rawDecodedString = "";
+    let storedEt4Remainder = ""; // To store the trailing metadata like Name and Location cleanly
 
-    // 1. Pagbasa sa QR Image gamit ang Html5Qrcode library
+    // 1. Fixed handling for local image loading file picking trigger
     document.getElementById('qr-file').addEventListener('change', function(e) {
         if (e.target.files.length === 0) return;
         
@@ -116,60 +117,67 @@
             });
     });
 
-    // 2. Button 1 Logic: I-decode ang Impormasyon at mag-Auto-Fill (Strict Length Parsing)
+    // 2. Strict EMVCo Position parsing logic layout split
     document.getElementById('btn-decode').addEventListener('click', function() {
         let textToParse = rawDecodedString;
         
         if (!textToParse) {
-            alert("Mangyaring pumili muna ng QR code image.");
+            alert("Mangyaring pumili muna ng valid na QR code image.");
             return;
         }
 
-        // Tiyakin na tinatanggal ang lumang Tag 54 (Amount) para maging malinis ang string cutting
+        // Clean out old amount tags (Tag 54) to enforce clean base slicing layouts
         if (textToParse.includes("540")) {
             textToParse = textToParse.replace(/54\d{2}\d+\.\d{2}/, "");
         }
 
-        // EditText 1: Unang 12 characters ("000201010211")
+        // EditText 1: First 12 header characters ("000201010211")
         let et1 = textToParse.substring(0, 12);
         let remaining = textToParse.substring(12);
 
-        // Hanapin kung nasaan ang '0315' para sa phone code pointer nang hindi nawawala ang mga zero
+        // Find the index location of phone tag payload boundary ('0315')
         let tag03Index = remaining.indexOf("0315");
         if (tag03Index === -1) {
-            alert("Ang QR na ito ay hindi tugma sa karaniwang GCash routing standard.");
+            alert("Ang QR na ito ay hindi tugma sa karaniwang GCash standard arrangement string.");
             return;
         }
 
-        // EditText 2: Merchant Base kasama ang '0315' header tag
+        // EditText 2: Base data up until '0315' parameter headers
         let et2 = remaining.substring(0, tag03Index + 4);
         let afterEt2 = remaining.substring(tag03Index + 4);
 
-        // EditText 3: Ang eksaktong 15 karakter ng phone segment token ("152170200000006")
+        // EditText 3: The strict 15 character token block payload ("152170200000006")
         let et3 = afterEt2.substring(0, 15);
         let afterEt3 = afterEt2.substring(15);
 
-        // Hanapin ang CRC Header box ('6304') sa pinakadulo ng data stream
-        let crcIndex = afterEt3.indexOf("6304");
-        
-        // EditText 4: Pangalan, Lokasyon, at lahat ng extra parameters nang buo
-        let et4 = afterEt3.substring(0, crcIndex);
-        
-        // EditText 6: Ang orihinal na CRC data tag block
-        let et6 = afterEt3.substring(crcIndex);
+        // Find the marker boundary where country details shift sequence starts ('5802PH')
+        let tag58Index = afterEt3.indexOf("5802PH");
+        if (tag58Index === -1) {
+            alert("Hindi matukoy ang internal structural map blocks.");
+            return;
+        }
 
-        // Pasukuin ang mga nakuhang halaga sa bawat field elements
+        // EditText 4: Clean middle data fields slice before Country tag sequence bounds
+        let et4 = afterEt3.substring(0, tag58Index);
+        let afterEt4 = afterEt3.substring(tag58Index);
+
+        // Separate and isolate the terminal text variables string array boundaries
+        let crcIndex = afterEt4.indexOf("6304");
+        storedEt4Remainder = afterEt4.substring(0, crcIndex);
+        let et6 = afterEt4.substring(crcIndex);
+
+        // Push clean array items safely into UI form elements without drop shifts
         document.getElementById('edit-text-1').value = et1;
         document.getElementById('edit-text-2').value = et2;
         document.getElementById('edit-text-3').value = et3;
         document.getElementById('edit-text-4').value = et4;
-        document.getElementById('edit-text-5').value = ""; // Blangko para sulatan ng bagong halaga
+        document.getElementById('edit-text-5').value = ""; // Blank input for user value
         document.getElementById('edit-text-6').value = et6;
 
         alert("Naipamahagi na ang impormasyon sa mga EditText fields nang walang bawas na zero!");
     });
 
-    // Opisyal na EMVCo CRC-16 CCITT-FALSE Signature Calculation Code
+    // Universal CRC-16 CCITT-FALSE Implementation Engine Check
     function computeCRC16(str) {
         let crc = 0xFFFF;
         for (let c = 0; c < str.length; c++) {
@@ -186,20 +194,21 @@
         return hex.padStart(4, '0');
     }
 
-    // 3. Button 2 Logic: Pagsasama-sama ng mga EditText at pagbuo ng Bagong QR
+    // 3. Assemble and calculate array content blocks correctly
     document.getElementById('btn-generate').addEventListener('click', function() {
         let et1 = document.getElementById('edit-text-1').value;
         let et2 = document.getElementById('edit-text-2').value;
         let et3 = document.getElementById('edit-text-3').value;
         let et4 = document.getElementById('edit-text-4').value;
         let et5 = document.getElementById('edit-text-5').value;
+        let et4Remainder = storedEt4Remainder || "5802PH5910JA****E P.6012Ilayang Iyam61041234";
 
         if (!et1 || !et2 || !et3 || !et4) {
             alert("Mangyaring i-decode muna ang orihinal na QR code.");
             return;
         }
 
-        // Pagbuo ng panibagong Amount Tag (Tag 54) na may tamang 2 decimal places
+        // Generate Tag 54 configuration layout values
         let amountTag = "";
         if (et5 && parseFloat(et5) > 0) {
             let formattedAmount = parseFloat(et5).toFixed(2);
@@ -207,16 +216,17 @@
             amountTag = "54" + tagLength + formattedAmount;
         }
 
-        // PAGSASAMA-SAMA SA UNIBERSAL NA KAAYUSAN (Inilalagay ang Amount bago ang Extra Tags / Name)
-        let combinedStringWithoutCRC = et1 + et2 + et3 + amountTag + et4 + "6304";
+        // STRICT PERFECT POSITIONING SEQUENCE CONCATENATION ORDER FLOW:
+        // [Header] + [Merchant Base] + [Phone Parameter] + [Identity Block] + [AMOUNT] + [Metadata Name String] + [CRC 6304 Marker]
+        let combinedStringWithoutCRC = et1 + et2 + et3 + et4 + amountTag + et4Remainder + "6304";
         let calculatedCRC = computeCRC16(combinedStringWithoutCRC);
         let finalCompleteQRString = combinedStringWithoutCRC + calculatedCRC;
 
-        // I-update ang UI box elements
+        // Populate fields
         document.getElementById('edit-text-6').value = "6304" + calculatedCRC;
         document.getElementById('final-string-output').value = finalCompleteQRString;
 
-        // Paggawa ng Larawan ng QR Code gamit ang library
+        // Render Canvas layout output blocks
         document.getElementById('qrcode').innerHTML = "";
         new QRCode(document.getElementById("qrcode"), {
             text: finalCompleteQRString,
@@ -230,7 +240,7 @@
         document.getElementById('result-qr-container').style.display = "block";
     });
 
-    // Logic para sa madaling pag-download ng nabuong larawan
+    // Image file extraction helper element
     document.getElementById('btn-download').addEventListener('click', function() {
         let qrImg = document.querySelector('#qrcode img');
         if (qrImg) {
