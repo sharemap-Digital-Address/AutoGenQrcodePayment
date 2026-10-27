@@ -209,6 +209,9 @@
 
 <script>
     let selectedFile = null;
+    let savedSubTag04 = "";
+    let savedTag52 = "";
+    let savedEt4Rest = "";
 
     document.getElementById('qrUpload').addEventListener('change', function(e) {
         const files = e.target.files;
@@ -244,7 +247,7 @@
         let et1 = textToParse.substring(0, 12);
         let remaining = textToParse.substring(12);
         
-        // Linisin ang lumang amount kung meron man para hindi sumobra
+        // Linisin ang lumang amount at currency kung meron man
         if (remaining.includes("540")) {
             remaining = remaining.replace(/54\d{2}\d+\.\d{2}/, "");
         }
@@ -255,31 +258,52 @@
         let tag03Index = remaining.indexOf("0315");
         if (tag03Index === -1) tag03Index = 0;
 
-        let et2 = remaining.substring(0, tag03Index + 4); 
+        let et2 = remaining.substring(0, tag03Index); 
         let afterEt2 = remaining.substring(tag03Index + 4);
         
         let et3 = afterEt2.substring(0, 15);
         let afterEt3 = afterEt2.substring(15);
         
-        let crcIndex = afterEt3.indexOf("6304");
-        if (crcIndex === -1) crcIndex = afterEt3.length - 4;
+        // Kunin ang sub-tag 04 (hal. 0417DWQM4...)
+        let subTag04Len = parseInt(afterEt3.substring(2, 4), 10);
+        let subTag04TotalLen = 4 + subTag04Len; 
+        savedSubTag04 = afterEt3.substring(0, subTag04TotalLen);
         
-        let et4 = afterEt3.substring(0, crcIndex);
-        let et6 = afterEt3.substring(crcIndex);
+        let restOfTags = afterEt3.substring(subTag04TotalLen);
 
-        document.getElementById('edit-text-1').value = et1;
-        document.getElementById('edit-text-2').value = et2;
-        document.getElementById('edit-text-3').value = et3;
-        document.getElementById('edit-text-4').value = et4; // Dito na mapupunta nang buo ang natitirang tag (tulad ng 0520...)
-        document.getElementById('edit-text-5').value = ""; 
-        document.getElementById('edit-text-6').value = et6;
+        // Hiwalayin ang Tag 52 (MCC) at ang natitirang tags
+        if (restOfTags.startsWith("52")) {
+            let tag52Len = parseInt(restOfTags.substring(2, 4), 10);
+            let tag52TotalLen = 4 + tag52Len;
+            savedTag52 = restOfTags.substring(0, tag52TotalLen); // e.g. 52046016
+            let afterTag52 = restOfTags.substring(tag52TotalLen);
+
+            if (afterTag52.startsWith("5303608")) {
+                afterTag52 = afterTag52.substring(7);
+            }
+
+            let crcIndex = afterTag52.indexOf("6304");
+            if (crcIndex === -1) crcIndex = afterTag52.length - 4;
+            
+            savedEt4Rest = afterTag52.substring(0, crcIndex);
+            let et6 = afterTag52.substring(crcIndex);
+
+            document.getElementById('edit-text-1').value = et1;
+            document.getElementById('edit-text-2').value = et2;
+            document.getElementById('edit-text-3').value = et3;
+            document.getElementById('edit-text-4').value = savedEt4Rest;
+            document.getElementById('edit-text-5').value = ""; 
+            document.getElementById('edit-text-6').value = et6;
+        } else {
+            alert("Babala: Hindi natagpuan ang simula ng Tag 52 sa QR string.");
+        }
     }
 
     document.getElementById('btnDecode').addEventListener('click', function() {
         const et2 = document.getElementById('edit-text-2').value;
         const et3 = document.getElementById('edit-text-3').value;
         const et4 = document.getElementById('edit-text-4').value;
-        const fullString = et2 + et3 + et4;
+        const fullString = et2 + "0315" + et3 + (savedSubTag04 || "") + (savedTag52 || "52046016") + "5303608" + et4;
 
         if(!fullString) {
             alert("Walang QR data na babasahin. Mag-upload muna ng larawan.");
@@ -326,7 +350,7 @@
         let et1 = document.getElementById('edit-text-1').value;
         let et2 = document.getElementById('edit-text-2').value;
         let et3 = document.getElementById('edit-text-3').value;
-        let et4 = document.getElementById('edit-text-4').value;
+        let et4 = document.getElementById('edit-text-4').value; // et4 ang rest of tags (Country, Name, City, atbp.)
         let et5 = document.getElementById('edit-text-5').value;
 
         if (!et1 || !et3) {
@@ -336,18 +360,22 @@
 
         let amountTagFull = "";
         let amount = parseFloat(et5);
+        let currencyTag = "5303608"; // Standard Currency (PHP)
 
-        // Kung may nilagay na amount, isingit nang wasto ang Currency (5303608) at Amount (54...) bago mag-EditText 4
+        // Kung may nilagay na amount, isingit nang wasto pagkatapos ng Tag 52 at bago ang et4
         if (!isNaN(amount) && amount > 0) {
             const amountStr = amount.toFixed(2);
             const lengthStr = amountStr.length.toString().padStart(2, '0');
             const tag54 = "54" + lengthStr + amountStr;
-            const currencyTag = "5303608"; 
             amountTagFull = currencyTag + tag54;
+        } else {
+            amountTagFull = currencyTag; // Kahit walang amount, kailangan ang currency tag
         }
 
-        // Tamang pagkakasunod-sunod: et1 + et2 + et3 + [Amount kung meron] + et4 + "6304"
-        let combinedStringWithoutCRC = et1 + et2 + et3 + amountTagFull + et4 + "6304";
+        // Tamang pagkakasunod-sunod batay sa EMVCo QRPh Standard:
+        // et1 (Header) + et2 + "0315" + et3 + savedSubTag04 + savedTag52 (MCC) + [Currency + Amount] + et4 (Country, Name, City...) + "6304"
+        let combinedStringWithoutCRC = et1 + et2 + "0315" + et3 + (savedSubTag04 || "0417DWQM4TK3JDNWE4H9") + (savedTag52 || "52046016") + amountTagFull + et4 + "6304";
+        
         const finalChecksum = computeCRC16(combinedStringWithoutCRC);
         const completeQRString = combinedStringWithoutCRC + finalChecksum;
 
@@ -387,7 +415,7 @@
         const imageURL = newCanvas.toDataURL("image/png");
         const a = document.createElement("a");
         a.href = imageURL;
-        a.download = "GCash_QR_With_Amount.png";
+        a.download = "GCash_QR_Perfect_Order.png";
         document.body.appendChild(a);
         a.click();
         document.body.removeChild(a);
