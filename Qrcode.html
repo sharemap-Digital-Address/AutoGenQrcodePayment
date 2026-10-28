@@ -31,7 +31,7 @@
 <body>
 
 <div class="container">
-    <h2>QRPh Tool (Multi-Bank Fixed)</h2>
+    <h2>QRPh Dynamic Tool (Multi-Bank Fixed)</h2>
     <div class="subtitle">Matalinong Pag-parse para sa GCash, Maya, at CIMB</div>
     
     <!-- 1) PUMILI NG QR IMAGE -->
@@ -263,15 +263,20 @@ document.getElementById('btn-generate').addEventListener('click', function() {
     
     let et4Adjusted = cleanEt4;
 
+    // =========================================================================
+    // DITO MO IPAPASOK ANG PAGBABAGO (PUMALIT SA LUMANG IF (HASAMOUNT) BLOCK):
+    // =========================================================================
     if (hasAmount) {
-        let formattedAmount = parseFloat(et5).toFixed(2);
-        let tagLength = String(formattedAmount).length.toString().padStart(2, '0');
-        amountTag = "54" + tagLength + formattedAmount;
+        // TAMA AT WALANG TULDOK: Kinukuha ang purong integer string mula sa EditText 5
+        let formattedAmount = parseFloat(et5).toString(); 
+        let tagLength = formattedAmount.length.toString().padStart(2, '0');
+        amountTag = "54" + tagLength + formattedAmount; // Lalabas ang orihinal na: 540250
         
-        // Gagamitin natin ang cleanEt4 para sa exact character boundary indexing
         let currencyIndex = cleanEt4.indexOf("5303608");
         if (currencyIndex !== -1) {
-            let positionToInsert = currencyIndex + 7;
+            // TAMA AT NASA UNAHAN: Ginamit ang currencyIndex nang walang dagdag (+7)
+            // upang maisingit ang amountTag (540250) sa KALIWA o UNAHAN ng 5303608
+            let positionToInsert = currencyIndex;
             et4Adjusted = cleanEt4.substring(0, positionToInsert) + amountTag + cleanEt4.substring(positionToInsert);
         } else {
             let tag58Index = cleanEt4.indexOf("5802PH");
@@ -282,6 +287,9 @@ document.getElementById('btn-generate').addEventListener('click', function() {
             }
         }
     }
+    // =========================================================================
+    // HANGGANG DITO LANG ANG PALITAN. ANG BABA NITO AY WALANG BABAGUHIN:
+    // =========================================================================
 
     // Nananatili ang iyong orihinal na structural assembly pattern:
     let combinedStringWithoutCRC = et1 + et2 + et3 + et4Adjusted + "6304";
@@ -303,7 +311,6 @@ document.getElementById('btn-generate').addEventListener('click', function() {
 
     document.getElementById('result-qr-container').style.display = "block";
 });
-
 
     // Download QR Image Logic
     document.getElementById('btn-download').addEventListener('click', function() {
