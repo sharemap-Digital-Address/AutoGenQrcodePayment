@@ -1,0 +1,323 @@
+<!DOCTYPE html>
+<html lang="tl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>QRPh Tool4 (All-in-One Multi-Bank Fixed)</title>
+    <!-- Mga kinakailangang library para sa pag-scan at pag-generate ng QR -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html5-qrcode/2.3.8/html5-qrcode.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+    <style>
+        body { font-family: Arial, sans-serif; background-color: #f4f6f9; margin: 0; padding: 20px; color: #333; }
+        .container { max-width: 600px; margin: 0 auto; background: white; padding: 20px; border-radius: 8px; box-shadow: 0 4px 10px rgba(0,0,0,0.1); }
+        h2 { text-align: center; color: #0052cc; margin-bottom: 5px; }
+        .subtitle { text-align: center; color: #666; font-size: 14px; margin-bottom: 20px; }
+        .network-indicator { text-align: center; font-weight: bold; color: #28a745; margin-bottom: 15px; font-size: 15px; display: block; padding: 8px; background: #eef9f0; border-radius: 4px; border: 1px solid #c3e6cb; }
+        .form-group { margin-bottom: 15px; }
+        label { display: block; font-weight: bold; margin-bottom: 5px; color: #444; font-size: 13px; }
+        input[type="text"], input[type="number"] { width: 100%; padding: 10px; border: 1px solid #ccc; border-radius: 4px; box-sizing: border-box; background-color: #f9f9f9; }
+        #edit-text-3, #edit-text-5 { background-color: #fff !important; border: 2px solid #0052cc !important; font-weight: bold; }
+        #edit-text-5 { color: #0052cc; font-size: 16px; }
+        button { width: 100%; padding: 12px; background-color: #0052cc; color: white; border: none; border-radius: 4px; font-size: 16px; font-weight: bold; cursor: pointer; margin-top: 10px; margin-bottom: 10px; }
+        button:hover { background-color: #0041a3; }
+        .btn-decode { background-color: #0052cc; }
+        .btn-generate { background-color: #28a745; }
+        .btn-generate:hover { background-color: #218838; }
+        #qr-reader-box { width: 100%; margin-bottom: 15px; border: 2px dashed #0052cc; border-radius: 4px; padding: 20px; text-align: center; background: #f0f5ff; box-sizing: border-box; }
+        #result-qr-container { text-align: center; margin-top: 20px; padding: 15px; background: #eef9f0; border: 1px solid #c3e6cb; border-radius: 8px; display: none; }
+        #qrcode { display: inline-block; margin-top: 10px; padding: 15px; background: white; border: 1px solid #ddd; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h2>QRPh Tool4 (Multi-Bank Fixed)</h2>
+    <div class="subtitle">Matalinong Pag-parse para sa GCash, Maya, at CIMB</div>
+    
+    <!-- 1) PUMILI NG QR IMAGE -->
+    <div id="qr-reader-box">
+        <label for="qr-file" style="cursor: pointer; display: block; margin: 0; font-size: 15px;">
+            📸 1) Pumili ng QR Image (Basahin ang QR Code)
+        </label>
+        <input type="file" id="qr-file" accept="image/*" style="display: none;">
+    </div>
+
+    <div id="detected-bank" class="network-indicator">Detected Network: Wala pang napipiling QR</div>
+
+    <button id="btn-decode" class="btn-decode">I-decode ang Impormasyon ng Account</button>
+
+    <hr style="margin: 20px 0; border: 0; border-top: 1px solid #eee;">
+
+    <!-- 2) 6 NA BAHAGI NG QR STRING -->
+    <div class="form-group">
+        <label>• EditText 1 (Header/Format) - [Auto Static/Dynamic]:</label>
+        <input type="text" id="edit-text-1" placeholder="Awtomatikong mapupunan..." readonly>
+    </div>
+
+    <div class="form-group">
+        <label>• EditText 2 (Merchant Info Base) - [Readonly]:</label>
+        <input type="text" id="edit-text-2" placeholder="Awtomatikong mapupunan..." readonly>
+    </div>
+
+    <div class="form-group">
+        <label style="color: #0052cc;">• EditText 3 (Phone Number / Routing / Alias Token) - [EDITABLE]:</label>
+        <input type="text" id="edit-text-3" placeholder="Awtomatikong mapupunan...">
+    </div>
+
+    <div class="form-group">
+        <label>• EditText 4 (Identity Tokens at Data Tags) - [Readonly]:</label>
+        <input type="text" id="edit-text-4" placeholder="Awtomatikong mapupunan..." readonly>
+    </div>
+
+    <div class="form-group">
+        <label style="color: #28a745;">• EditText 5 (Halaga / Amount) - [ANG EDITABLE PART]:</label>
+        <input type="number" id="edit-text-5" placeholder="0.00" step="0.01">
+    </div>
+
+    <div class="form-group">
+        <label>• EditText 6 (CRC Checksum) - [Auto-updated]:</label>
+        <input type="text" id="edit-text-6" placeholder="Awtomatikong mapupunan..." readonly>
+    </div>
+
+    <!-- 3) GENERATE BUTTON -->
+    <button id="btn-generate" class="btn-generate">2. Generate Bagong QR Code</button>
+
+    <!-- 4) OUTPUT DISPLAY -->
+    <div id="result-qr-container">
+        <h3 style="color: #155724; margin-top: 0;">Buong QR String na may CRC Hash:</h3>
+        <input type="text" id="final-string-output" readonly style="background-color: #fff; text-align: center; font-family: monospace; font-size: 12px; margin-bottom: 15px;">
+        <div>
+            <div id="qrcode"></div>
+        </div>
+        <button id="btn-download" style="background-color: #6c757d; width: auto; font-size: 14px; padding: 8px 15px;">I-download ang QR Image (May Quiet Zone)</button>
+    </div>
+</div>
+
+<script>
+    let rawDecodedString = "";
+    let detectedBankType = "GCASH";
+
+    // 1. Pagbasa sa QR Image gamit ang Html5Qrcode library
+    document.getElementById('qr-file').addEventListener('change', function(e) {
+        if (!e.target.files || e.target.files.length === 0) return;
+        
+        const imageFile = e.target.files[0];
+        const readerBox = document.getElementById('qr-reader-box');
+        
+        readerBox.style.background = "#fff";
+        readerBox.innerText = "Ina-analyze ang larawan: " + imageFile.name;
+
+        const html5QrCode = new Html5Qrcode("qr-reader-box");
+        html5QrCode.scanFile(imageFile, true)
+            .then(decodedText => {
+                rawDecodedString = decodedText;
+                readerBox.innerHTML = `✅ Tagumpay na na-scan! Handa nang i-decode.<br><small style="word-break: break-all; color: #555;">${decodedText.substring(0, 40)}...</small>`;
+                readerBox.style.background = "#e2f0d9";
+            })
+            .catch(err => {
+                readerBox.innerText = "❌ Hindi mabasang QR Code. Subukan uli ang ibang larawan.";
+                readerBox.style.background = "#fce4d6";
+                console.error(err);
+            });
+    });
+
+    // 2. Matalinong Pag-decode para sa GCash, Maya, at CIMB
+    document.getElementById('btn-decode').addEventListener('click', function() {
+        let textToParse = rawDecodedString;
+        let indicatorEl = document.getElementById('detected-bank');
+        
+        if (!textToParse) {
+            alert("Mangyaring pumili at mag-abang muna na matagumpay na ma-scan ang QR code image.");
+            return;
+        }
+
+        // Tanggalin ang umiiral na Tag 54 (Amount) kung meron man para malinis ang parsing
+        if (textToParse.includes("540")) {
+            textToParse = textToParse.replace(/54\d{2}\d+\.\d{2}/, "");
+        }
+
+        let et1 = textToParse.substring(0, 12);
+        let remaining = textToParse.substring(12);
+        let crcIndex = textToParse.indexOf("6304");
+        if (crcIndex === -1) {
+            crcIndex = textToParse.length - 4;
+        }
+        let et6 = textToParse.substring(crcIndex);
+
+        let et2 = "", et3 = "", et4 = "";
+
+        // -- URI 1: MAYA P2P QR --
+        if (textToParse.includes("@p2p.maya") || textToParse.includes("p.ppoc.p2p")) {
+            detectedBankType = "MAYA";
+            indicatorEl.innerText = "⚡ Detected Network: Maya Universal QR";
+            indicatorEl.style.color = "#28a745";
+
+            let tagAliasIndex = remaining.indexOf("639");
+            if (tagAliasIndex === -1) tagAliasIndex = 25;
+
+            et2 = remaining.substring(0, tagAliasIndex);
+            let afterEt2 = remaining.substring(tagAliasIndex);
+            
+            let nextBlockIndex = afterEt2.indexOf("0208");
+            if (nextBlockIndex === -1) nextBlockIndex = 15;
+
+            et3 = afterEt2.substring(0, nextBlockIndex);
+            let afterEt3 = afterEt2.substring(nextBlockIndex);
+            
+            et4 = afterEt3.substring(0, afterEt3.indexOf("6304"));
+
+        } 
+        // -- URI 2: CIMB / GSave QR (May kasamang eksaktong pagtukoy sa com.p2pqrpay at CIPHPHMMXXX) --
+        else if (textToParse.includes("cimb") || textToParse.includes("GSave") || textToParse.includes("ins.p2p") || textToParse.includes("com.p2pqrpay") || textToParse.includes("CIPHPHMMXXX")) {
+            detectedBankType = "CIMB";
+            indicatorEl.innerText = "⚡ Detected Network: CIMB Pay / GSave Account";
+            indicatorEl.style.color = "#d39e00";
+
+            let tagRouteIndex = remaining.indexOf("GSave") !== -1 ? remaining.indexOf("GSave") : (remaining.indexOf("0410") !== -1 ? remaining.indexOf("0410") : 30);
+            et2 = remaining.substring(0, tagRouteIndex);
+            let afterEt2 = remaining.substring(tagRouteIndex);
+            
+            let nextTagIndex = afterEt2.indexOf("5204");
+            if (nextTagIndex === -1) nextTagIndex = 20;
+
+            et3 = afterEt2.substring(0, nextTagIndex);
+            let afterEt3 = afterEt2.substring(nextTagIndex);
+            
+            et4 = afterEt3.substring(0, afterEt3.indexOf("6304"));
+
+        } 
+        // -- URI 3: GCASH P2P QR (Default fallback) --
+        else {
+            detectedBankType = "GCASH";
+            indicatorEl.innerText = "⚡ Detected Network: GCash P2P Account";
+            indicatorEl.style.color = "#0052cc";
+
+            let tag03Index = remaining.indexOf("0315");
+            if (tag03Index === -1) tag03Index = 0;
+
+            et2 = remaining.substring(0, tag03Index + 4);
+            let afterEt2 = remaining.substring(tag03Index + 4);
+            et3 = afterEt2.substring(0, 15);
+            let afterEt3 = afterEt2.substring(15);
+            et4 = afterEt3.substring(0, afterEt3.indexOf("6304"));
+        }
+
+        // Pagsasalin sa mga EditText fields
+        document.getElementById('edit-text-1').value = et1;
+        document.getElementById('edit-text-2').value = et2;
+        document.getElementById('edit-text-3').value = et3;
+        document.getElementById('edit-text-4').value = et4;
+        document.getElementById('edit-text-5').value = "";
+        document.getElementById('edit-text-6').value = et6;
+
+        alert("Tagumpay na na-decode ang QR code!");
+    });
+
+    // CRC-16 CCITT-FALSE Calculation Function
+    function computeCRC16(str) {
+        let crc = 0xFFFF;
+        for (let c = 0; c < str.length; c++) {
+            crc ^= str.charCodeAt(c) << 8;
+            for (let i = 0; i < 8; i++) {
+                if (crc & 0x8000) {
+                    crc = (crc << 1) ^ 0x1021;
+                } else {
+                    crc = crc << 1;
+                }
+            }
+        }
+        let hex = (crc & 0xFFFF).toString(16).toUpperCase();
+        return hex.padStart(4, '0');
+    }
+
+    // 3. Button 2 Logic: Generate Bagong QR Code (Hiwalay ang pormula ng CIMB sa GCash/Maya)
+    document.getElementById('btn-generate').addEventListener('click', function() {
+        let et1 = document.getElementById('edit-text-1').value;
+        let et2 = document.getElementById('edit-text-2').value;
+        let et3 = document.getElementById('edit-text-3').value;
+        let et4 = document.getElementById('edit-text-4').value;
+        let et5 = document.getElementById('edit-text-5').value;
+
+        if (!et1 || !et2) {
+            alert("Mangyaring i-decode muna ang QR code bago mag-generate.");
+            return;
+        }
+
+        let hasAmount = et5 && parseFloat(et5) > 0;
+        let header = et1.substring(0, 10) + (hasAmount ? "12" : "11");
+        document.getElementById('edit-text-1').value = header;
+
+        let amountTag = "";
+        if (hasAmount) {
+            let formattedAmount = parseFloat(et5).toFixed(2);
+            let tagLength = String(formattedAmount).length.toString().padStart(2, '0');
+            amountTag = "54" + tagLength + formattedAmount; 
+        }
+
+        let combinedStringWithoutCRC = "";
+
+        // -- KUNG CIMB ANG IDINECODE (Gumagamit ng panlinis para sa 540250 nang ligtas ang 540111) --
+        if (detectedBankType === "CIMB") {
+            let finalEt4 = et4;
+            if (et3.includes("CIPHPHMMXXX") || et3.includes("com.p2pqrpay") || et4.includes("540250")) {
+                finalEt4 = et4.replace(/540250/g, "");
+            }
+            // Eksaktong pormula para sa CIMB
+            combinedStringWithoutCRC = header + et2 + amountTag + finalEt4 + et3 + "6304";
+        } 
+        // -- KUNG GCASH O MAYA (Gumagamit ng kanilang orihinal at subok na pormula) --
+        else {
+            let et4Adjusted = et4;
+            if (hasAmount) {
+                let currencyIndex = et4.indexOf("5303608");
+                if (currencyIndex !== -1) {
+                    let positionToInsert = currencyIndex + 7;
+                    et4Adjusted = et4.substring(0, positionToInsert) + amountTag + et4.substring(positionToInsert);
+                } else {
+                    let tag58Index = et4.indexOf("5802PH");
+                    if (tag58Index !== -1) {
+                        et4Adjusted = et4.substring(0, tag58Index) + amountTag + et4.substring(tag58Index);
+                    } else {
+                        et4Adjusted = et4 + amountTag;
+                    }
+                }
+            }
+            // Eksaktong pormula para sa GCash/Maya
+            combinedStringWithoutCRC = header + et2 + et3 + et4Adjusted + "6304";
+        }
+
+        let calculatedCRC = computeCRC16(combinedStringWithoutCRC);
+        let finalCompleteQRString = combinedStringWithoutCRC + calculatedCRC;
+
+        document.getElementById('edit-text-6').value = "6304" + calculatedCRC;
+        document.getElementById('final-string-output').value = finalCompleteQRString;
+
+        document.getElementById('qrcode').innerHTML = "";
+        new QRCode(document.getElementById("qrcode"), {
+            text: finalCompleteQRString,
+            width: 250,
+            height: 250,
+            colorDark : "#000000",
+            colorLight : "#ffffff",
+            correctLevel : QRCode.CorrectLevel.M
+        });
+
+        document.getElementById('result-qr-container').style.display = "block";
+    });
+
+    // Download QR Image Logic
+    document.getElementById('btn-download').addEventListener('click', function() {
+        let qrImg = document.querySelector('#qrcode img');
+        if (qrImg) {
+            let link = document.createElement('a');
+            link.href = qrImg.src;
+            link.download = 'dynamic_multibank_qr.png';
+            link.click();
+        } else {
+            alert("Gumawa muna ng QR bago i-download.");
+        }
+    });
+</script>
+
+</body>
+</html>
