@@ -31,7 +31,7 @@
 <body>
 
 <div class="container">
-    <h2>QRPh Tool (Multi-Bank Fixed)</h2>
+    <h2>QRPh Tool4 (Multi-Bank Fixed)</h2>
     <div class="subtitle">Matalinong Pag-parse para sa GCash, Maya, at CIMB</div>
     
     <!-- 1) PUMILI NG QR IMAGE -->
@@ -97,20 +97,20 @@
     let rawDecodedString = "";
     let detectedBankType = "GCASH";
 
-    // CRC16-CCITT implementation na eksaktong tugma sa poly 0x1021 at init 0xFFFF
-    function calculate_crc(payload) {
-        let crc = 0xFFFF;
-        for (let i = 0; i < payload.length; i++) {
-            crc ^= payload.charCodeAt(i) << 8;
-            for (let j = 0; j < 8; j++) {
-                if (crc & 0x8000) {
-                    crc = ((crc << 1) ^ 0x1021) & 0xFFFF;
-                } else {
-                    crc = (crc << 1) & 0xFFFF;
-                }
-            }
-        }
-        return crc.toString(16).toUpperCase().padStart(4, '0');
+    // CRC16 CCITT standard calculator function
+    function calculate_crc(str) { 
+        let crc = 0xFFFF; 
+        for (let c = 0; c < str.length; c++) { 
+            crc ^= str.charCodeAt(c) << 8; 
+            for (let i = 0; i < 8; i++) { 
+                if ((crc & 0x8000) !== 0) { 
+                    crc = ((crc << 1) ^ 0x1021) & 0xFFFF; 
+                } else { 
+                    crc = (crc << 1) & 0xFFFF; 
+                } 
+            } 
+        } 
+        return crc.toString(16).toUpperCase().padStart(4, '0'); 
     }
 
     // 1. Pagbasa sa QR Image gamit ang Html5Qrcode library
@@ -237,57 +237,60 @@
         alert("Tagumpay na na-decode ang QR code!");
     });
 
-    // 3. Button 2 Logic: Generate Bagong QR Code (Gamit ang na-update at ligtas na tag object mapping)
+    // 3. Button 2 Logic: Generate Bagong QR Code (Iyong eksaktong CIMB Generation Logic)
     document.getElementById('btn-generate').addEventListener('click', function() {
-        let et1 = document.getElementById('edit-text-1').value; // Header (000201010212 o 11)
-        let et2 = document.getElementById('edit-text-2').value; // Unahang bahagi (City, Country, MCC)
-        let et4 = document.getElementById('edit-text-4').value; // Buong Tag 27 block mula sa pagka-decode
-        let et5 = document.getElementById('edit-text-5').value; // Amount
+        let et1 = document.getElementById('edit-text-1').value.trim(); 
+        let et2 = document.getElementById('edit-text-2').value.trim(); 
+        let et4 = document.getElementById('edit-text-4').value.trim(); 
+        let et5 = document.getElementById('edit-text-5').value.trim(); 
 
         if (!et1) {
-            alert("Mangyaring i-decode muna ang QR code.");
+            alert("Mangyaring i-decode muna ang QR code bago mag-generate.");
             return;
         }
 
-        // Auto Switch Header batay sa Amount (12 kung may halaga, 11 kung wala)
+        // 1. SIGURADUHING MALINIS ANG HEADER (000201010212 o 11)
         let hasAmount = et5 && parseFloat(et5) > 0;
         let header = et1.substring(0, 10) + (hasAmount ? "12" : "11");
         document.getElementById('edit-text-1').value = header;
 
-        // Nililinis ang et2 sa anumang sumabit na Tag 54, 53, o 59 nang walang backreference error
-        let cleanEt2 = et2.replace(/54\d{2}[0-9.]+/g, "")
-                          .replace(/5303608/g, "")
-                          .replace(/59\d{2}[A-Za-z0-9 .]+/g, "");
-        
-        let merchantNameTag = "5910JAYROME P."; 
-        let currencyTag = "5303608";
-        
+        // 2. LINISIN ANG ET2 (Tanggalin ang sumabit na pangalan o maling tags)
+        let cleanEt2 = et2.replace(/54\d{2}[0-9.]+/g, "") 
+                          .replace(/5303608/g, "") 
+                          .replace(/59\d{2}[A-Za-z0-9 .]+/g, "") 
+                          .replace(/JAYROME P\./g, ""); 
+
+        // 3. BUOHIN ANG MGA STANDARD TAGS
         let amountTag = "";
         if (hasAmount) {
             let formattedAmount = parseFloat(et5).toFixed(2);
             let tagLength = String(formattedAmount).length.toString().padStart(2, '0');
-            amountTag = "54" + tagLength + formattedAmount; // Halimbawa: 540550.00
-        }
+            amountTag = "54" + tagLength + formattedAmount; 
+        } 
+        let currencyTag = "5303608"; 
+        let merchantNameTag = "5910JAYROME P."; 
 
-        // Sinisigurong hindi masisira ang routing ng CIMB (540111) sa loob ng Tag 27 block
-        let tag27Block = et4;
-        if (tag27Block.startsWith("54")) {
-            let match = tag27Block.match(/^54\d{2}[0-9.]+/);
-            if (match) {
-                tag27Block = tag27Block.substring(match[0].length);
-            }
-        }
+        // 4. SIGURADUHING BUO ANG BANK ROUTING AT WALANG BAWAS SA 540111
+        let cleanEt4 = et4; 
+        if (cleanEt4.startsWith("54") && !cleanEt4.startsWith("540111")) { 
+            let match = cleanEt4.match(/^54\d{2}[0-9.]+/); 
+            if (match) { 
+                cleanEt4 = cleanEt4.substring(match[0].length); 
+            } 
+        } 
 
         let combinedStringWithoutCRC = "";
         if (detectedBankType === "CIMB") {
-            combinedStringWithoutCRC = header + cleanEt2 + amountTag + currencyTag + merchantNameTag + tag27Block + "6304";
+            // 5. EKSAKTONG PAGSAMA-SAMAHIN AYON SA EMVCO STANDARD LAYOUT PARA SA CIMB
+            combinedStringWithoutCRC = header + cleanEt2 + amountTag + currencyTag + merchantNameTag + cleanEt4 + "6304"; 
         } else {
             let et3 = document.getElementById('edit-text-3').value;
-            combinedStringWithoutCRC = header + cleanEt2 + et3 + tag27Block + "6304";
+            combinedStringWithoutCRC = header + cleanEt2 + et3 + cleanEt4 + "6304";
         }
 
-        let calculatedCRC = calculate_crc(combinedStringWithoutCRC);
-        let finalCompleteQRString = combinedStringWithoutCRC + calculatedCRC;
+        // 6. I-COMPUTE ANG TAMANG CRC
+        let calculatedCRC = calculate_crc(combinedStringWithoutCRC); 
+        let finalCompleteQRString = combinedStringWithoutCRC + calculatedCRC; 
 
         document.getElementById('edit-text-6').value = "6304" + calculatedCRC;
         document.getElementById('final-string-output').value = finalCompleteQRString;
