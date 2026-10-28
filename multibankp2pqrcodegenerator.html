@@ -147,17 +147,15 @@
             return;
         }
 
-        // Tanggalin ang umiiral na Tag 54 (Amount) kung meron man para malinis ang parsing
-        if (textToParse.includes("540")) {
-            textToParse = textToParse.replace(/54\d{2}\d+\.\d{2}/, "");
-        }
+        // Nilinis ang ANUMANG umiiral na Tag 54 gamit ang malawak na regex
+        textToParse = textToParse.replace(/54\d{2}[0-9.]+/g, "");
 
         let crcIndex = textToParse.indexOf("6304");
         if (crcIndex === -1) {
             crcIndex = textToParse.length - 4;
         }
         let et6 = textToParse.substring(crcIndex);
-        let coreText = textToParse.substring(0, crcIndex); // Hindi kasama ang CRC block sa dulo
+        let coreText = textToParse.substring(0, crcIndex);
 
         let et1 = "", et2 = "", et3 = "", et4 = "";
 
@@ -170,16 +168,15 @@
             et1 = coreText.substring(0, 12);
             let remaining = coreText.substring(12);
 
-            // Sa CIMB, ang Tag 27 (p2pqrpay info) ay nasa hulihan bago ang CRC
             let tag27Index = remaining.indexOf("27");
             if (tag27Index !== -1) {
-                et2 = remaining.substring(0, tag27Index); // City, Country, MCC, Currency, Name, etc.
-                et4 = remaining.substring(tag27Index);   // Tag 27 block hanggang sa dulo
+                et2 = remaining.substring(0, tag27Index); 
+                et4 = remaining.substring(tag27Index);   
             } else {
                 et2 = remaining;
                 et4 = "";
             }
-            et3 = ""; // Walang hiwalay na phone router dito dahil nasa loob ng Tag 27 block
+            et3 = ""; 
 
         } 
         // -- URI 1: MAYA P2P QR --
@@ -222,7 +219,6 @@
             et4 = afterEt2.substring(15);
         }
 
-        // Pagsasalin sa mga EditText fields
         document.getElementById('edit-text-1').value = et1;
         document.getElementById('edit-text-2').value = et2;
         document.getElementById('edit-text-3').value = et3;
@@ -254,6 +250,10 @@
         }
         document.getElementById('edit-text-1').value = et1;
 
+        // Siguraduhing malinis sa lumang Tag 54 ang et2 at et4 bago mag-insert
+        et2 = et2.replace(/54\d{2}[0-9.]+/g, "");
+        et4 = et4.replace(/54\d{2}[0-9.]+/g, "");
+
         let amountTag = "";
         let et2Adjusted = et2;
         let et4Adjusted = et4;
@@ -263,7 +263,6 @@
             let tagLength = String(formattedAmount).length.toString().padStart(2, '0');
             amountTag = "54" + tagLength + formattedAmount;
             
-            // Pag-insert ng amount tag depende kung CIMB o iba
             if (detectedBankType === "CIMB") {
                 let currencyIndex = et2.indexOf("5303608");
                 if (currencyIndex !== -1) {
@@ -288,7 +287,6 @@
             }
         }
 
-        // Pagsasama-sama ng string batay sa uri ng bangko
         let combinedStringWithoutCRC = "";
         if (detectedBankType === "CIMB") {
             combinedStringWithoutCRC = et1 + et2Adjusted + et4Adjusted + "6304";
