@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>QRPh Tool4 (All-in-One Multi-Bank Fixed)</title>
+    <title>QRPh Tool (All-in-One Multi-Bank Fixed)</title>
     <!-- Mga kinakailangang library para sa pag-scan at pag-generate ng QR -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html5-qrcode/2.3.8/html5-qrcode.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
@@ -55,17 +55,17 @@
     </div>
 
     <div class="form-group">
-        <label>• EditText 2 (Merchant Info Base) - [Readonly]:</label>
+        <label>• EditText 2 (Merchant Info Base / Main Block) - [Readonly]:</label>
         <input type="text" id="edit-text-2" placeholder="Awtomatikong mapupunan..." readonly>
     </div>
 
     <div class="form-group">
-        <label style="color: #0052cc;">• EditText 3 (Phone Number / Routing / Alias Token) - [EDITABLE]:</label>
+        <label style="color: #0052cc;">• EditText 3 (Routing / Opsyonal) - [EDITABLE]:</label>
         <input type="text" id="edit-text-3" placeholder="Awtomatikong mapupunan...">
     </div>
 
     <div class="form-group">
-        <label>• EditText 4 (Identity Tokens at Data Tags) - [Readonly]:</label>
+        <label>• EditText 4 (Tag 27 / Extra Blocks) - [Readonly]:</label>
         <input type="text" id="edit-text-4" placeholder="Awtomatikong mapupunan..." readonly>
     </div>
 
@@ -96,6 +96,22 @@
 <script>
     let rawDecodedString = "";
     let detectedBankType = "GCASH";
+
+    // CRC16-CCITT implementation na eksaktong tugma sa poly 0x1021 at init 0xFFFF
+    function calculate_crc(payload) {
+        let crc = 0xFFFF;
+        for (let i = 0; i < payload.length; i++) {
+            crc ^= payload.charCodeAt(i) << 8;
+            for (let j = 0; j < 8; j++) {
+                if (crc & 0x8000) {
+                    crc = ((crc << 1) ^ 0x1021) & 0xFFFF;
+                } else {
+                    crc = (crc << 1) & 0xFFFF;
+                }
+            }
+        }
+        return crc.toString(16).toUpperCase().padStart(4, '0');
+    }
 
     // 1. Pagbasa sa QR Image gamit ang Html5Qrcode library
     document.getElementById('qr-file').addEventListener('change', function(e) {
@@ -136,21 +152,44 @@
             textToParse = textToParse.replace(/54\d{2}\d+\.\d{2}/, "");
         }
 
-        let et1 = textToParse.substring(0, 12);
-        let remaining = textToParse.substring(12);
         let crcIndex = textToParse.indexOf("6304");
         if (crcIndex === -1) {
             crcIndex = textToParse.length - 4;
         }
         let et6 = textToParse.substring(crcIndex);
+        let coreText = textToParse.substring(0, crcIndex); // Hindi kasama ang CRC block sa dulo
 
-        let et2 = "", et3 = "", et4 = "";
+        let et1 = "", et2 = "", et3 = "", et4 = "";
 
+        // -- URI 2: CIMB / GSave QR --
+        if (textToParse.includes("cimb") || textToParse.includes("GSave") || textToParse.includes("ins.p2p") || textToParse.includes("p2pqrpay")) {
+            detectedBankType = "CIMB";
+            indicatorEl.innerText = "⚡ Detected Network: CIMB Pay / GSave Account";
+            indicatorEl.style.color = "#d39e00";
+
+            et1 = coreText.substring(0, 12);
+            let remaining = coreText.substring(12);
+
+            // Sa CIMB, ang Tag 27 (p2pqrpay info) ay nasa hulihan bago ang CRC
+            let tag27Index = remaining.indexOf("27");
+            if (tag27Index !== -1) {
+                et2 = remaining.substring(0, tag27Index); // City, Country, MCC, Currency, Name, etc.
+                et4 = remaining.substring(tag27Index);   // Tag 27 block hanggang sa dulo
+            } else {
+                et2 = remaining;
+                et4 = "";
+            }
+            et3 = ""; // Walang hiwalay na phone router dito dahil nasa loob ng Tag 27 block
+
+        } 
         // -- URI 1: MAYA P2P QR --
-        if (textToParse.includes("@p2p.maya") || textToParse.includes("p.ppoc.p2p")) {
+        else if (textToParse.includes("@p2p.maya") || textToParse.includes("p.ppoc.p2p")) {
             detectedBankType = "MAYA";
             indicatorEl.innerText = "⚡ Detected Network: Maya Universal QR";
             indicatorEl.style.color = "#28a745";
+
+            et1 = coreText.substring(0, 12);
+            let remaining = coreText.substring(12);
 
             let tagAliasIndex = remaining.indexOf("639");
             if (tagAliasIndex === -1) tagAliasIndex = 25;
@@ -162,28 +201,7 @@
             if (nextBlockIndex === -1) nextBlockIndex = 15;
 
             et3 = afterEt2.substring(0, nextBlockIndex);
-            let afterEt3 = afterEt2.substring(nextBlockIndex);
-            
-            et4 = afterEt3.substring(0, afterEt3.indexOf("6304"));
-
-        } 
-        // -- URI 2: CIMB / GSave QR --
-        else if (textToParse.includes("cimb") || textToParse.includes("GSave") || textToParse.includes("ins.p2p")) {
-            detectedBankType = "CIMB";
-            indicatorEl.innerText = "⚡ Detected Network: CIMB Pay / GSave Account";
-            indicatorEl.style.color = "#d39e00";
-
-            let tagRouteIndex = remaining.indexOf("GSave") !== -1 ? remaining.indexOf("GSave") : (remaining.indexOf("0410") !== -1 ? remaining.indexOf("0410") : 30);
-            et2 = remaining.substring(0, tagRouteIndex);
-            let afterEt2 = remaining.substring(tagRouteIndex);
-            
-            let nextTagIndex = afterEt2.indexOf("5204");
-            if (nextTagIndex === -1) nextTagIndex = 20;
-
-            et3 = afterEt2.substring(0, nextTagIndex);
-            let afterEt3 = afterEt2.substring(nextTagIndex);
-            
-            et4 = afterEt3.substring(0, afterEt3.indexOf("6304"));
+            et4 = afterEt2.substring(nextBlockIndex);
 
         } 
         // -- URI 3: GCASH P2P QR (Default fallback) --
@@ -192,14 +210,16 @@
             indicatorEl.innerText = "⚡ Detected Network: GCash P2P Account";
             indicatorEl.style.color = "#0052cc";
 
+            et1 = coreText.substring(0, 12);
+            let remaining = coreText.substring(12);
+
             let tag03Index = remaining.indexOf("0315");
             if (tag03Index === -1) tag03Index = 0;
 
             et2 = remaining.substring(0, tag03Index + 4);
             let afterEt2 = remaining.substring(tag03Index + 4);
             et3 = afterEt2.substring(0, 15);
-            let afterEt3 = afterEt2.substring(15);
-            et4 = afterEt3.substring(0, afterEt3.indexOf("6304"));
+            et4 = afterEt2.substring(15);
         }
 
         // Pagsasalin sa mga EditText fields
@@ -212,23 +232,6 @@
 
         alert("Tagumpay na na-decode ang QR code!");
     });
-
-    // CRC-16 CCITT-FALSE Calculation Function
-    function computeCRC16(str) {
-        let crc = 0xFFFF;
-        for (let c = 0; c < str.length; c++) {
-            crc ^= str.charCodeAt(c) << 8;
-            for (let i = 0; i < 8; i++) {
-                if (crc & 0x8000) {
-                    crc = (crc << 1) ^ 0x1021;
-                } else {
-                    crc = crc << 1;
-                }
-            }
-        }
-        let hex = (crc & 0xFFFF).toString(16).toUpperCase();
-        return hex.padStart(4, '0');
-    }
 
     // 3. Button 2 Logic: Generate Bagong QR Code
     document.getElementById('btn-generate').addEventListener('click', function() {
@@ -252,6 +255,7 @@
         document.getElementById('edit-text-1').value = et1;
 
         let amountTag = "";
+        let et2Adjusted = et2;
         let et4Adjusted = et4;
 
         if (hasAmount) {
@@ -259,22 +263,40 @@
             let tagLength = String(formattedAmount).length.toString().padStart(2, '0');
             amountTag = "54" + tagLength + formattedAmount;
             
-            let currencyIndex = et4.indexOf("5303608");
-            if (currencyIndex !== -1) {
-                let positionToInsert = currencyIndex + 7;
-                et4Adjusted = et4.substring(0, positionToInsert) + amountTag + et4.substring(positionToInsert);
-            } else {
-                let tag58Index = et4.indexOf("5802PH");
-                if (tag58Index !== -1) {
-                    et4Adjusted = et4.substring(0, tag58Index) + amountTag + et4.substring(tag58Index);
+            // Pag-insert ng amount tag depende kung CIMB o iba
+            if (detectedBankType === "CIMB") {
+                let currencyIndex = et2.indexOf("5303608");
+                if (currencyIndex !== -1) {
+                    let positionToInsert = currencyIndex + 7;
+                    et2Adjusted = et2.substring(0, positionToInsert) + amountTag + et2.substring(positionToInsert);
                 } else {
-                    et4Adjusted = et4 + amountTag;
+                    et2Adjusted = et2 + amountTag;
+                }
+            } else {
+                let currencyIndex = et4.indexOf("5303608");
+                if (currencyIndex !== -1) {
+                    let positionToInsert = currencyIndex + 7;
+                    et4Adjusted = et4.substring(0, positionToInsert) + amountTag + et4.substring(positionToInsert);
+                } else {
+                    let tag58Index = et4.indexOf("5802PH");
+                    if (tag58Index !== -1) {
+                        et4Adjusted = et4.substring(0, tag58Index) + amountTag + et4.substring(tag58Index);
+                    } else {
+                        et4Adjusted = et4 + amountTag;
+                    }
                 }
             }
         }
 
-        let combinedStringWithoutCRC = et1 + et2 + et3 + et4Adjusted + "6304";
-        let calculatedCRC = computeCRC16(combinedStringWithoutCRC);
+        // Pagsasama-sama ng string batay sa uri ng bangko
+        let combinedStringWithoutCRC = "";
+        if (detectedBankType === "CIMB") {
+            combinedStringWithoutCRC = et1 + et2Adjusted + et4Adjusted + "6304";
+        } else {
+            combinedStringWithoutCRC = et1 + et2Adjusted + et3 + et4Adjusted + "6304";
+        }
+
+        let calculatedCRC = calculate_crc(combinedStringWithoutCRC);
         let finalCompleteQRString = combinedStringWithoutCRC + calculatedCRC;
 
         document.getElementById('edit-text-6').value = "6304" + calculatedCRC;
