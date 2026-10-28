@@ -31,7 +31,7 @@
 <body>
 
 <div class="container">
-    <h2>QRPh Tool (Multi-Bank Fixed)</h2>
+    <h2>QRPh Tool4 (Multi-Bank Fixed)</h2>
     <div class="subtitle">Matalinong Pag-parse para sa GCash, Maya, at CIMB</div>
     
     <!-- 1) PUMILI NG QR IMAGE -->
@@ -168,10 +168,22 @@
             et1 = coreText.substring(0, 12);
             let remaining = coreText.substring(12);
 
-            let tag27Index = remaining.indexOf("27");
+            // Sa CIMB, ang Tag 27 block ay nagsisimula sa tag ID na '27' at sinusundan ng haba (hal. 2761 o 27...)
+            // Hahanapin natin ang eksaktong simula ng Tag 27 sa pamamagitan ng paghahanap ng kasunod ng Tag 59 (Pangalan) o Tag 58
+            let tag27Index = -1;
+            // Ang CIMB routing block ay laging sumusunod pagkatapos ng Tag 59 (Pangalan)
+            let tag59Pos = remaining.indexOf("59");
+            if (tag59Pos !== -1) {
+                // Basahin ang haba ng Tag 59 para malaman kung saan ito magtatapos
+                let tag59Len = parseInt(remaining.substring(tag59Pos + 2, tag59Pos + 4), 10);
+                tag27Index = tag59Pos + 4 + tag59Len;
+            } else {
+                tag27Index = remaining.indexOf("2761"); // Fallback sakaling maiba ang index
+            }
+
             if (tag27Index !== -1) {
-                et2 = remaining.substring(0, tag27Index); 
-                et4 = remaining.substring(tag27Index);   
+                et2 = remaining.substring(0, tag27Index); // Buong unahan kasama ang Tag 53 at Tag 59
+                et4 = remaining.substring(tag27Index);   // Tag 27 block hanggang sa dulo
             } else {
                 et2 = remaining;
                 et4 = "";
@@ -264,6 +276,8 @@
             amountTag = "54" + tagLength + formattedAmount;
             
             if (detectedBankType === "CIMB") {
+                // Para sa CIMB, isinisingit natin ang Tag 54 sa tamang posisyon (pagkatapos ng Tag 53 o bago ang Tag 59)
+                // Kung nasaan ang Tag 5303608, doon natin ilalagay kasunod
                 let currencyIndex = et2.indexOf("5303608");
                 if (currencyIndex !== -1) {
                     let positionToInsert = currencyIndex + 7;
@@ -289,6 +303,7 @@
 
         let combinedStringWithoutCRC = "";
         if (detectedBankType === "CIMB") {
+            // Para sa CIMB, ang tamang ayos ay: Header + et2 (May kasamang Tag 53, Tag 59, at Tag 54) + et4 (Tag 27 block) + "6304"
             combinedStringWithoutCRC = et1 + et2Adjusted + et4Adjusted + "6304";
         } else {
             combinedStringWithoutCRC = et1 + et2Adjusted + et3 + et4Adjusted + "6304";
