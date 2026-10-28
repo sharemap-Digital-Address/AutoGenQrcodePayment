@@ -12,7 +12,7 @@
         .container { max-width: 600px; margin: 0 auto; background: white; padding: 20px; border-radius: 8px; box-shadow: 0 4px 10px rgba(0,0,0,0.1); }
         h2 { text-align: center; color: #0052cc; margin-bottom: 5px; }
         .subtitle { text-align: center; color: #666; font-size: 14px; margin-bottom: 20px; }
-        .network-indicator { text-align: center; font-weight: bold; color: #28a745; margin-bottom: 15px; font-size: 15px; display: none; }
+        .network-indicator { text-align: center; font-weight: bold; color: #28a745; margin-bottom: 15px; font-size: 15px; display: block; padding: 8px; background: #eef9f0; border-radius: 4px; border: 1px solid #c3e6cb; }
         .form-group { margin-bottom: 15px; }
         label { display: block; font-weight: bold; margin-bottom: 5px; color: #444; font-size: 13px; }
         input[type="text"], input[type="number"] { width: 100%; padding: 10px; border: 1px solid #ccc; border-radius: 4px; box-sizing: border-box; background-color: #f9f9f9; }
@@ -31,7 +31,7 @@
 <body>
 
 <div class="container">
-    <h2>QRPh Tools (Multi-Bank Fixed)</h2>
+    <h2>QRPh Tool4 (Multi-Bank Fixed)</h2>
     <div class="subtitle">Matalinong Pag-parse para sa GCash, Maya, at CIMB</div>
     
     <!-- 1) PUMILI NG QR IMAGE -->
@@ -42,7 +42,7 @@
         <input type="file" id="qr-file" accept="image/*" style="display: none;">
     </div>
 
-    <div id="detected-bank" class="network-indicator">Detected Network: None</div>
+    <div id="detected-bank" class="network-indicator">Detected Network: Wala pang napipiling QR</div>
 
     <button id="btn-decode" class="btn-decode">I-decode ang Impormasyon ng Account</button>
 
@@ -95,42 +95,43 @@
 
 <script>
     let rawDecodedString = "";
-    let detectedBankType = "GCASH"; // GCASH, MAYA, o CIMB
+    let detectedBankType = "GCASH";
 
     // 1. Pagbasa sa QR Image gamit ang Html5Qrcode library
     document.getElementById('qr-file').addEventListener('change', function(e) {
         if (!e.target.files || e.target.files.length === 0) return;
         
-        const html5QrCode = new Html5Qrcode("qr-reader-box");
         const imageFile = e.target.files[0];
+        const readerBox = document.getElementById('qr-reader-box');
         
-        document.getElementById('qr-reader-box'].style.background = "#fff";
-        document.getElementById('qr-reader-box'].innerText = "Ina-analyze ang larawan: " + imageFile.name;
+        readerBox.style.background = "#fff";
+        readerBox.innerText = "Ina-analyze ang larawan: " + imageFile.name;
 
+        const html5QrCode = new Html5Qrcode("qr-reader-box");
         html5QrCode.scanFile(imageFile, true)
             .then(decodedText => {
                 rawDecodedString = decodedText;
-                document.getElementById('qr-reader-box'].innerText = "✅ Tagumpay na na-scan! Handa nang i-decode.";
-                document.getElementById('qr-reader-box'].style.background = "#e2f0d9";
+                readerBox.innerHTML = `✅ Tagumpay na na-scan! Handa nang i-decode.<br><small style="word-break: break-all; color: #555;">${decodedText.substring(0, 40)}...</small>`;
+                readerBox.style.background = "#e2f0d9";
             })
             .catch(err => {
-                document.getElementById('qr-reader-box'].innerText = "❌ Hindi mabasang QR Code. Subukan uli.";
-                document.getElementById('qr-reader-box'].style.background = "#fce4d6";
+                readerBox.innerText = "❌ Hindi mabasang QR Code. Subukan uli ang ibang larawan.";
+                readerBox.style.background = "#fce4d6";
                 console.error(err);
             });
     });
 
-    // 2. Matalinong Pag-decode para sa GCash, Maya, at CIMB nang nakasulat sa tamang EditText fields
+    // 2. Matalinong Pag-decode para sa GCash, Maya, at CIMB
     document.getElementById('btn-decode').addEventListener('click', function() {
         let textToParse = rawDecodedString;
         let indicatorEl = document.getElementById('detected-bank');
         
         if (!textToParse) {
-            alert("Mangyaring pumili muna ng QR code image.");
+            alert("Mangyaring pumili at mag-abang muna na matagumpay na ma-scan ang QR code image.");
             return;
         }
 
-        // Tanggalin ang umiiral na Tag 54 (Amount) para malinis ang pag-parse
+        // Tanggalin ang umiiral na Tag 54 (Amount) kung meron man para malinis ang parsing
         if (textToParse.includes("540")) {
             textToParse = textToParse.replace(/54\d{2}\d+\.\d{2}/, "");
         }
@@ -138,87 +139,78 @@
         let et1 = textToParse.substring(0, 12);
         let remaining = textToParse.substring(12);
         let crcIndex = textToParse.indexOf("6304");
+        if (crcIndex === -1) {
+            crcIndex = textToParse.length - 4;
+        }
         let et6 = textToParse.substring(crcIndex);
+
+        let et2 = "", et3 = "", et4 = "";
 
         // -- URI 1: MAYA P2P QR --
         if (textToParse.includes("@p2p.maya") || textToParse.includes("p.ppoc.p2p")) {
             detectedBankType = "MAYA";
-            indicatorEl.innerText = " Detected Network: Maya Universal QR";
+            indicatorEl.innerText = "⚡ Detected Network: Maya Universal QR";
             indicatorEl.style.color = "#28a745";
-            indicatorEl.style.display = "block";
 
-            // Tag 26 base block hanggang bago ang alias token
-            let tagAliasIndex = remaining.indexOf("639"); // Karaniwang nagsisimula sa mobile number o alias
-            if (tagAliasIndex === -1) tagAliasIndex = 30;
+            let tagAliasIndex = remaining.indexOf("639");
+            if (tagAliasIndex === -1) tagAliasIndex = 25;
 
-            let et2 = remaining.substring(0, tagAliasIndex);
+            et2 = remaining.substring(0, tagAliasIndex);
             let afterEt2 = remaining.substring(tagAliasIndex);
             
-            // Hanapin kung saan tapos ang alias (halimbawa bago mag-tag 02 o iba pang block)
             let nextBlockIndex = afterEt2.indexOf("0208");
-            if (nextBlockIndex === -1) nextBlockIndex = 20;
+            if (nextBlockIndex === -1) nextBlockIndex = 15;
 
-            let et3 = afterEt2.substring(0, nextBlockIndex);
+            et3 = afterEt2.substring(0, nextBlockIndex);
             let afterEt3 = afterEt2.substring(nextBlockIndex);
             
-            let et4 = afterEt3.substring(0, afterEt3.indexOf("6304"));
-
-            document.getElementById('edit-text-1').value = et1;
-            document.getElementById('edit-text-2').value = et2;
-            document.getElementById('edit-text-3').value = et3;
-            document.getElementById('edit-text-4').value = et4;
-            document.getElementById('edit-text-5').value = "";
-            document.getElementById('edit-text-6').value = et6;
+            et4 = afterEt3.substring(0, afterEt3.indexOf("6304"));
 
         } 
         // -- URI 2: CIMB / GSave QR --
         else if (textToParse.includes("cimb") || textToParse.includes("GSave") || textToParse.includes("ins.p2p")) {
             detectedBankType = "CIMB";
-            indicatorEl.innerText = " Detected Network: CIMB Pay / GSave Account";
-            indicatorEl.style.color = "#ffc107";
-            indicatorEl.style.display = "block";
+            indicatorEl.innerText = "⚡ Detected Network: CIMB Pay / GSave Account";
+            indicatorEl.style.color = "#d39e00";
 
-            let tagRouteIndex = remaining.indexOf("GSave") !== -1 ? remaining.indexOf("GSave") : remaining.indexOf("0410");
-            let et2 = remaining.substring(0, tagRouteIndex);
+            let tagRouteIndex = remaining.indexOf("GSave") !== -1 ? remaining.indexOf("GSave") : (remaining.indexOf("0410") !== -1 ? remaining.indexOf("0410") : 30);
+            et2 = remaining.substring(0, tagRouteIndex);
             let afterEt2 = remaining.substring(tagRouteIndex);
             
             let nextTagIndex = afterEt2.indexOf("5204");
-            let et3 = afterEt2.substring(0, nextTagIndex);
+            if (nextTagIndex === -1) nextTagIndex = 20;
+
+            et3 = afterEt2.substring(0, nextTagIndex);
             let afterEt3 = afterEt2.substring(nextTagIndex);
             
-            let et4 = afterEt3.substring(0, afterEt3.indexOf("6304"));
-
-            document.getElementById('edit-text-1').value = et1;
-            document.getElementById('edit-text-2').value = et2;
-            document.getElementById('edit-text-3').value = et3;
-            document.getElementById('edit-text-4').value = et4;
-            document.getElementById('edit-text-5').value = "";
-            document.getElementById('edit-text-6').value = et6;
+            et4 = afterEt3.substring(0, afterEt3.indexOf("6304"));
 
         } 
         // -- URI 3: GCASH P2P QR (Default fallback) --
         else {
             detectedBankType = "GCASH";
-            indicatorEl.innerText = " Detected Network: GCash P2P Account";
+            indicatorEl.innerText = "⚡ Detected Network: GCash P2P Account";
             indicatorEl.style.color = "#0052cc";
-            indicatorEl.style.display = "block";
 
             let tag03Index = remaining.indexOf("0315");
-            let et2 = remaining.substring(0, tag03Index + 4);
-            let afterEt2 = remaining.substring(tag03Index + 4);
-            let et3 = afterEt2.substring(0, 15);
-            let afterEt3 = afterEt2.substring(15);
-            let et4 = afterEt3.substring(0, afterEt3.indexOf("6304"));
+            if (tag03Index === -1) tag03Index = 0;
 
-            document.getElementById('edit-text-1').value = et1;
-            document.getElementById('edit-text-2').value = et2;
-            document.getElementById('edit-text-3').value = et3;
-            document.getElementById('edit-text-4').value = et4;
-            document.getElementById('edit-text-5').value = "";
-            document.getElementById('edit-text-6').value = et6;
+            et2 = remaining.substring(0, tag03Index + 4);
+            let afterEt2 = remaining.substring(tag03Index + 4);
+            et3 = afterEt2.substring(0, 15);
+            let afterEt3 = afterEt2.substring(15);
+            et4 = afterEt3.substring(0, afterEt3.indexOf("6304"));
         }
 
-        alert("Tagumpay na na-decode at naisulat sa kaukulang EditText fields!");
+        // Pagsasalin sa mga EditText fields
+        document.getElementById('edit-text-1').value = et1;
+        document.getElementById('edit-text-2').value = et2;
+        document.getElementById('edit-text-3').value = et3;
+        document.getElementById('edit-text-4').value = et4;
+        document.getElementById('edit-text-5').value = "";
+        document.getElementById('edit-text-6').value = et6;
+
+        alert("Tagumpay na na-decode ang QR code!");
     });
 
     // CRC-16 CCITT-FALSE Calculation Function
@@ -238,7 +230,7 @@
         return hex.padStart(4, '0');
     }
 
-    // 3. Button 2 Logic: Pagbuo ng Bagong QR kasama ang Tag 54 Amount at tamang CRC
+    // 3. Button 2 Logic: Generate Bagong QR Code
     document.getElementById('btn-generate').addEventListener('click', function() {
         let et1 = document.getElementById('edit-text-1').value;
         let et2 = document.getElementById('edit-text-2').value;
@@ -246,12 +238,11 @@
         let et4 = document.getElementById('edit-text-4').value;
         let et5 = document.getElementById('edit-text-5').value;
 
-        if (!et1 || !et2 || !et3 || !et4) {
+        if (!et1 || !et2) {
             alert("Mangyaring i-decode muna ang QR code bago mag-generate.");
             return;
         }
 
-        // Auto Switch Header (12 kung may amount, 11 kung wala)
         let hasAmount = et5 && parseFloat(et5) > 0;
         if (hasAmount) {
             et1 = et1.substring(0, 10) + "12";
@@ -276,11 +267,12 @@
                 let tag58Index = et4.indexOf("5802PH");
                 if (tag58Index !== -1) {
                     et4Adjusted = et4.substring(0, tag58Index) + amountTag + et4.substring(tag58Index);
+                } else {
+                    et4Adjusted = et4 + amountTag;
                 }
             }
         }
 
-        // Pagsasama ng buong string nang walang CRC sa dulo
         let combinedStringWithoutCRC = et1 + et2 + et3 + et4Adjusted + "6304";
         let calculatedCRC = computeCRC16(combinedStringWithoutCRC);
         let finalCompleteQRString = combinedStringWithoutCRC + calculatedCRC;
@@ -288,7 +280,6 @@
         document.getElementById('edit-text-6').value = "6304" + calculatedCRC;
         document.getElementById('final-string-output').value = finalCompleteQRString;
 
-        // Render QR Code graphic
         document.getElementById('qrcode').innerHTML = "";
         new QRCode(document.getElementById("qrcode"), {
             text: finalCompleteQRString,
