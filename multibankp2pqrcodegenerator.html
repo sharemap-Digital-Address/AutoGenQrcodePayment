@@ -168,22 +168,18 @@
             et1 = coreText.substring(0, 12);
             let remaining = coreText.substring(12);
 
-            // Sa CIMB, ang Tag 27 block ay nagsisimula sa tag ID na '27' at sinusundan ng haba (hal. 2761 o 27...)
-            // Hahanapin natin ang eksaktong simula ng Tag 27 sa pamamagitan ng paghahanap ng kasunod ng Tag 59 (Pangalan) o Tag 58
             let tag27Index = -1;
-            // Ang CIMB routing block ay laging sumusunod pagkatapos ng Tag 59 (Pangalan)
             let tag59Pos = remaining.indexOf("59");
             if (tag59Pos !== -1) {
-                // Basahin ang haba ng Tag 59 para malaman kung saan ito magtatapos
                 let tag59Len = parseInt(remaining.substring(tag59Pos + 2, tag59Pos + 4), 10);
                 tag27Index = tag59Pos + 4 + tag59Len;
             } else {
-                tag27Index = remaining.indexOf("2761"); // Fallback sakaling maiba ang index
+                tag27Index = remaining.indexOf("2761");
             }
 
             if (tag27Index !== -1) {
-                et2 = remaining.substring(0, tag27Index); // Buong unahan kasama ang Tag 53 at Tag 59
-                et4 = remaining.substring(tag27Index);   // Tag 27 block hanggang sa dulo
+                et2 = remaining.substring(0, tag27Index); 
+                et4 = remaining.substring(tag27Index);   
             } else {
                 et2 = remaining;
                 et4 = "";
@@ -241,72 +237,53 @@
         alert("Tagumpay na na-decode ang QR code!");
     });
 
-    // 3. Button 2 Logic: Generate Bagong QR Code
+    // 3. Button 2 Logic: Generate Bagong QR Code (Gamit ang na-update at ligtas na tag object mapping)
     document.getElementById('btn-generate').addEventListener('click', function() {
-        let et1 = document.getElementById('edit-text-1').value;
-        let et2 = document.getElementById('edit-text-2').value;
-        let et3 = document.getElementById('edit-text-3').value;
-        let et4 = document.getElementById('edit-text-4').value;
-        let et5 = document.getElementById('edit-text-5').value;
+        let et1 = document.getElementById('edit-text-1').value; // Header (000201010212 o 11)
+        let et2 = document.getElementById('edit-text-2').value; // Unahang bahagi (City, Country, MCC)
+        let et4 = document.getElementById('edit-text-4').value; // Buong Tag 27 block mula sa pagka-decode
+        let et5 = document.getElementById('edit-text-5').value; // Amount
 
-        if (!et1 || !et2) {
-            alert("Mangyaring i-decode muna ang QR code bago mag-generate.");
+        if (!et1) {
+            alert("Mangyaring i-decode muna ang QR code.");
             return;
         }
 
+        // Auto Switch Header batay sa Amount (12 kung may halaga, 11 kung wala)
         let hasAmount = et5 && parseFloat(et5) > 0;
-        if (hasAmount) {
-            et1 = et1.substring(0, 10) + "12";
-        } else {
-            et1 = et1.substring(0, 10) + "11";
-        }
-        document.getElementById('edit-text-1').value = et1;
+        let header = et1.substring(0, 10) + (hasAmount ? "12" : "11");
+        document.getElementById('edit-text-1').value = header;
 
-        // Siguraduhing malinis sa lumang Tag 54 ang et2 at et4 bago mag-insert
-        et2 = et2.replace(/54\d{2}[0-9.]+/g, "");
-        et4 = et4.replace(/54\d{2}[0-9.]+/g, "");
-
+        // Nililinis ang et2 sa anumang sumabit na Tag 54, 53, o 59 nang walang backreference error
+        let cleanEt2 = et2.replace(/54\d{2}[0-9.]+/g, "")
+                          .replace(/5303608/g, "")
+                          .replace(/59\d{2}[A-Za-z0-9 .]+/g, "");
+        
+        let merchantNameTag = "5910JAYROME P."; 
+        let currencyTag = "5303608";
+        
         let amountTag = "";
-        let et2Adjusted = et2;
-        let et4Adjusted = et4;
-
         if (hasAmount) {
             let formattedAmount = parseFloat(et5).toFixed(2);
             let tagLength = String(formattedAmount).length.toString().padStart(2, '0');
-            amountTag = "54" + tagLength + formattedAmount;
-            
-            if (detectedBankType === "CIMB") {
-                // Para sa CIMB, isinisingit natin ang Tag 54 sa tamang posisyon (pagkatapos ng Tag 53 o bago ang Tag 59)
-                // Kung nasaan ang Tag 5303608, doon natin ilalagay kasunod
-                let currencyIndex = et2.indexOf("5303608");
-                if (currencyIndex !== -1) {
-                    let positionToInsert = currencyIndex + 7;
-                    et2Adjusted = et2.substring(0, positionToInsert) + amountTag + et2.substring(positionToInsert);
-                } else {
-                    et2Adjusted = et2 + amountTag;
-                }
-            } else {
-                let currencyIndex = et4.indexOf("5303608");
-                if (currencyIndex !== -1) {
-                    let positionToInsert = currencyIndex + 7;
-                    et4Adjusted = et4.substring(0, positionToInsert) + amountTag + et4.substring(positionToInsert);
-                } else {
-                    let tag58Index = et4.indexOf("5802PH");
-                    if (tag58Index !== -1) {
-                        et4Adjusted = et4.substring(0, tag58Index) + amountTag + et4.substring(tag58Index);
-                    } else {
-                        et4Adjusted = et4 + amountTag;
-                    }
-                }
+            amountTag = "54" + tagLength + formattedAmount; // Halimbawa: 540550.00
+        }
+
+        // Sinisigurong hindi masisira ang routing ng CIMB (540111) sa loob ng Tag 27 block
+        let tag27Block = et4;
+        if (tag27Block.startsWith("54")) {
+            let match = tag27Block.match(/^54\d{2}[0-9.]+/);
+            if (match) {
+                tag27Block = tag27Block.substring(match[0].length);
             }
         }
 
         let combinedStringWithoutCRC = "";
         if (detectedBankType === "CIMB") {
-            // Para sa CIMB, ang tamang ayos ay: Header + et2 (May kasamang Tag 53, Tag 59, at Tag 54) + et4 (Tag 27 block) + "6304"
-            combinedStringWithoutCRC = et1 + et2Adjusted + et4Adjusted + "6304";
+            combinedStringWithoutCRC = header + cleanEt2 + amountTag + currencyTag + merchantNameTag + tag27Block + "6304";
         } else {
-            combinedStringWithoutCRC = et1 + et2Adjusted + et3 + et4Adjusted + "6304";
+            let et3 = document.getElementById('edit-text-3').value;
+            combinedStringWithoutCRC = header + cleanEt2 + et3 + tag27Block + "6304";
         }
 
         let calculatedCRC = calculate_crc(combinedStringWithoutCRC);
@@ -315,6 +292,7 @@
         document.getElementById('edit-text-6').value = "6304" + calculatedCRC;
         document.getElementById('final-string-output').value = finalCompleteQRString;
 
+        // Render QR Code graphic
         document.getElementById('qrcode').innerHTML = "";
         new QRCode(document.getElementById("qrcode"), {
             text: finalCompleteQRString,
