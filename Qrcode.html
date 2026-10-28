@@ -167,8 +167,8 @@
             et4 = afterEt3.substring(0, afterEt3.indexOf("6304"));
 
         } 
-        // -- URI 2: CIMB / GSave QR (May kasamang eksaktong pagtukoy sa com.p2pqrpay at CIPHPHMMXXX) --
-        else if (textToParse.includes("cimb") || textToParse.includes("GSave") || textToParse.includes("ins.p2p") || textToParse.includes("com.p2pqrpay") || textToParse.includes("CIPHPHMMXXX")) {
+        // -- URI 2: CIMB / GSave QR --
+        else if (textToParse.includes("cimb") || textToParse.includes("GSave") || textToParse.includes("ins.p2p")) {
             detectedBankType = "CIMB";
             indicatorEl.innerText = "⚡ Detected Network: CIMB Pay / GSave Account";
             indicatorEl.style.color = "#d39e00";
@@ -230,80 +230,80 @@
         return hex.padStart(4, '0');
     }
 
-    // 3. Button 2 Logic: Generate Bagong QR Code (Hiwalay ang pormula ng CIMB sa GCash/Maya)
-    document.getElementById('btn-generate').addEventListener('click', function() {
-        let et1 = document.getElementById('edit-text-1').value;
-        let et2 = document.getElementById('edit-text-2').value;
-        let et3 = document.getElementById('edit-text-3').value;
-        let et4 = document.getElementById('edit-text-4').value;
-        let et5 = document.getElementById('edit-text-5').value;
+// 3. Button 2 Logic: Generate Bagong QR Code
+document.getElementById('btn-generate').addEventListener('click', function() {
+    let et1 = document.getElementById('edit-text-1').value;
+    let et2 = document.getElementById('edit-text-2').value;
+    let et3 = document.getElementById('edit-text-3').value;
+    let et4 = document.getElementById('edit-text-4').value;
+    let et5 = document.getElementById('edit-text-5').value;
 
-        if (!et1 || !et2) {
-            alert("Mangyaring i-decode muna ang QR code bago mag-generate.");
-            return;
-        }
+    if (!et1 || !et2) {
+        alert("Mangyaring i-decode muna ang QR code bago mag-generate.");
+        return;
+    }
 
-        let hasAmount = et5 && parseFloat(et5) > 0;
-        let header = et1.substring(0, 10) + (hasAmount ? "12" : "11");
-        document.getElementById('edit-text-1').value = header;
+    let hasAmount = et5 && parseFloat(et5) > 0;
+    if (hasAmount) {
+        et1 = et1.substring(0, 10) + "12";
+    } else {
+        et1 = et1.substring(0, 10) + "11";
+    }
+    document.getElementById('edit-text-1').value = et1;
 
-        let amountTag = "";
-        if (hasAmount) {
-            let formattedAmount = parseFloat(et5).toFixed(2);
-            let tagLength = String(formattedAmount).length.toString().padStart(2, '0');
-            amountTag = "54" + tagLength + formattedAmount; 
-        }
+    let amountTag = "";
+    
+    // --- SMART CLEANING FOR CIMB / MULTI-BANK ---
+    // Kung may bagong halaga sa et5, burahin muna ang lumang static tag (540250) 
+    // mula sa et4 para hindi ito mag-overlap o madoble sa pinal na string.
+    let cleanEt4 = et4;
+    if (hasAmount) {
+        cleanEt4 = et4.replace(/540250/g, "");
+    }
+    
+    let et4Adjusted = cleanEt4;
 
-        let combinedStringWithoutCRC = "";
-
-        // -- KUNG CIMB ANG IDINECODE (Gumagamit ng panlinis para sa 540250 nang ligtas ang 540111) --
-        if (detectedBankType === "CIMB") {
-            let finalEt4 = et4;
-            if (et3.includes("CIPHPHMMXXX") || et3.includes("com.p2pqrpay") || et4.includes("540250")) {
-                finalEt4 = et4.replace(/540250/g, "");
+    if (hasAmount) {
+        let formattedAmount = parseFloat(et5).toFixed(2);
+        let tagLength = String(formattedAmount).length.toString().padStart(2, '0');
+        amountTag = "54" + tagLength + formattedAmount;
+        
+        // Gagamitin natin ang cleanEt4 para sa exact character boundary indexing
+        let currencyIndex = cleanEt4.indexOf("5303608");
+        if (currencyIndex !== -1) {
+            let positionToInsert = currencyIndex + 7;
+            et4Adjusted = cleanEt4.substring(0, positionToInsert) + amountTag + cleanEt4.substring(positionToInsert);
+        } else {
+            let tag58Index = cleanEt4.indexOf("5802PH");
+            if (tag58Index !== -1) {
+                et4Adjusted = cleanEt4.substring(0, tag58Index) + amountTag + cleanEt4.substring(tag58Index);
+            } else {
+                et4Adjusted = cleanEt4 + amountTag;
             }
-            // Eksaktong pormula para sa CIMB
-            combinedStringWithoutCRC = header + et2 + amountTag + finalEt4 + et3 + "6304";
-        } 
-        // -- KUNG GCASH O MAYA (Gumagamit ng kanilang orihinal at subok na pormula) --
-        else {
-            let et4Adjusted = et4;
-            if (hasAmount) {
-                let currencyIndex = et4.indexOf("5303608");
-                if (currencyIndex !== -1) {
-                    let positionToInsert = currencyIndex + 7;
-                    et4Adjusted = et4.substring(0, positionToInsert) + amountTag + et4.substring(positionToInsert);
-                } else {
-                    let tag58Index = et4.indexOf("5802PH");
-                    if (tag58Index !== -1) {
-                        et4Adjusted = et4.substring(0, tag58Index) + amountTag + et4.substring(tag58Index);
-                    } else {
-                        et4Adjusted = et4 + amountTag;
-                    }
-                }
-            }
-            // Eksaktong pormula para sa GCash/Maya
-            combinedStringWithoutCRC = header + et2 + et3 + et4Adjusted + "6304";
         }
+    }
 
-        let calculatedCRC = computeCRC16(combinedStringWithoutCRC);
-        let finalCompleteQRString = combinedStringWithoutCRC + calculatedCRC;
+    // Nananatili ang iyong orihinal na structural assembly pattern:
+    let combinedStringWithoutCRC = et1 + et2 + et3 + et4Adjusted + "6304";
+    let calculatedCRC = computeCRC16(combinedStringWithoutCRC);
+    let finalCompleteQRString = combinedStringWithoutCRC + calculatedCRC;
 
-        document.getElementById('edit-text-6').value = "6304" + calculatedCRC;
-        document.getElementById('final-string-output').value = finalCompleteQRString;
+    document.getElementById('edit-text-6').value = "6304" + calculatedCRC;
+    document.getElementById('final-string-output').value = finalCompleteQRString;
 
-        document.getElementById('qrcode').innerHTML = "";
-        new QRCode(document.getElementById("qrcode"), {
-            text: finalCompleteQRString,
-            width: 250,
-            height: 250,
-            colorDark : "#000000",
-            colorLight : "#ffffff",
-            correctLevel : QRCode.CorrectLevel.M
-        });
-
-        document.getElementById('result-qr-container').style.display = "block";
+    document.getElementById('qrcode').innerHTML = "";
+    new QRCode(document.getElementById("qrcode"), {
+        text: finalCompleteQRString,
+        width: 250,
+        height: 250,
+        colorDark : "#000000",
+        colorLight : "#ffffff",
+        correctLevel : QRCode.CorrectLevel.M
     });
+
+    document.getElementById('result-qr-container').style.display = "block";
+});
+
 
     // Download QR Image Logic
     document.getElementById('btn-download').addEventListener('click', function() {
