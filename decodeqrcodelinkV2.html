@@ -3,11 +3,10 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>QRPh Web POS Direct Decoder Tool + Maya & CIMB Support</title>
-    <!-- jsQR Library CDN para sa Offline/Online Client-side Extraction -->
+    <title>QRPh Web POS Direct Decoder Tool + Multi-Bank Separated Logic</title>
+    <!-- E-wallet Qrcode compatible Gcash, Maya, CIMB jsQR Library CDN para sa Offline/Online Client-side Extraction -->
     <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js"></script>
-    <!-- qrcode.js Library CDN para sa Dynamic QR Generation -->
-  <!-- Qrcode compatible Gcash, CIMB, MAYA --->
+    <!--  qrcode.js Library CDN para sa Dynamic QR Generation -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
     <style>
         body { font-family: 'Segoe UI', Arial, sans-serif; background-color: #f4f6f9; margin: 0; padding: 20px; color: #333; }
@@ -75,11 +74,18 @@
 </div>
 
 <script>
+// Global variables para sa hiwalay na parsing istruktura
 let originalPayload = "";
-let bankMode = "STANDARD"; // Maaaring maging MAYA, CIMB, o STANDARD
-let staticBaseBeforeAmount = "";
-let staticBaseAfterAmount = "";
+let bankMode = "GCASH"; // GCASH, MAYA, o CIMB
 let qrTimer = null;
+
+// Hiwalay na structural parts para sa bawat bangko
+let parsedParts = {
+    et1: "", // Header (000201010212...)
+    et2: "", // Merchant info base
+    et3: "", // Phone / Routing / Alias Token
+    et4: ""  // Identity tokens, name, city, at iba pa bago mag-CRC
+};
 
 function decodeAndProcessLink() {
     const url = document.getElementById('linkInput').value.trim();
@@ -122,46 +128,97 @@ function decodeAndProcessLink() {
 function analyzeAndSplitPayload(payload) {
     const bankDisplay = document.getElementById('detectedBank');
     
-    // Pagtukoy sa Network gamit ang logic mula sa V1 tool mo at CIMB/GCash rules
-    if (payload.includes("@p2p.maya") || payload.includes("p.ppoc.p2p")) {
-        bankMode = "MAYA";
-        bankDisplay.innerHTML = '<span class="bank-badge" style="background-color: #28a745;">Maya Universal QR (Decimal Format)</span>';
-    } else if (payload.includes("CIPHPHMMXXX") || payload.includes("cimb") || payload.includes("GSave")) {
-        bankMode = "CIMB";
-        bankDisplay.innerHTML = '<span class="bank-badge" style="background-color: #de1f26;">CIMB Bank Philippines (No Decimal Format)</span>';
-    } else if (payload.includes("G-Xchange") || payload.includes("com.p2pqrpay")) {
-        bankMode = "STANDARD";
-        bankDisplay.innerHTML = '<span class="bank-badge" style="background-color: #0056ef;">GCash / Standard QRPh (Decimal Format)</span>';
-    } else {
-        bankMode = "STANDARD";
-        bankDisplay.innerHTML = '<span class="bank-badge" style="background-color: #616161;">Universal QRPh Match</span>';
+    // Linisin muna ang lumang Tag 54 (Amount) kung meron man sa raw string para hindi sumama sa parsing
+    let textToParse = payload;
+    if (textToParse.includes("54")) {
+        textToParse = textToParse.replace(/54\d{2}\d+(\.\d{2})?/, "");
     }
 
-    // Pansamantalang alisin ang lumang Tag 54 kung meron man para malinis ang paghati sa payload
-    let cleanPayload = payload;
-    const tag54Check = payload.indexOf("54");
-    if (tag54Check !== -1) {
-        const currentLen = parseInt(payload.substring(tag54Check + 2, tag54Check + 4), 10);
-        cleanPayload = payload.substring(0, tag54Check) + payload.substring(tag54Check + 4 + currentLen);
+    let et1 = textToParse.substring(0, 12);
+    // Palitan agad ang static header (0211) patungong dynamic (0212)
+    if(et1.startsWith("000201010211")) {
+        et1 = "000201010212" + et1.substring(12);
     }
-
-    // Hanapin ang pwesto ng CRC entry sa dulo (karaniwang nagsisimula sa 6304)
-    let crcIndex = cleanPayload.indexOf("6304");
+    
+    let remaining = textToParse.substring(12);
+    let crcIndex = textToParse.indexOf("6304");
     if (crcIndex === -1) {
-        crcIndex = cleanPayload.length - 4;
+        crcIndex = textToParse.length - 4;
     }
 
-    // I-isolate ang header segment at palitan ang static 0211 patungong dynamic 0212
-    let headerSegment = cleanPayload.substring(0, 12);
-    if(headerSegment.startsWith("000201010211")) {
-        headerSegment = "000201010212" + headerSegment.substring(12);
+    let et2 = "", et3 = "", et4 = "";
+
+    // ==========================================
+    // 1) HIWALAY NA PATAKARAN PARA SA MAYA
+    // ==========================================
+    if (textToParse.includes("@p2p.maya") || textToParse.includes("p.ppoc.p2p") || textToParse.includes("PAPHPHM1XXX")) {
+        bankMode = "MAYA";
+        bankDisplay.innerHTML = '<span class="bank-badge" style="background-color: #28a745;">⚡ Maya P2P Universal QR (Decimal Format)</span>';
+
+        let tagAliasIndex = remaining.indexOf("639");
+        if (tagAliasIndex === -1) tagAliasIndex = 25;
+
+        et2 = remaining.substring(0, tagAliasIndex);
+        let afterEt2 = remaining.substring(tagAliasIndex);
+        
+        let nextBlockIndex = afterEt2.indexOf("0208");
+        if (nextBlockIndex === -1) nextBlockIndex = 15;
+
+        et3 = afterEt2.substring(0, nextBlockIndex);
+        let afterEt3 = afterEt2.substring(nextBlockIndex);
+        
+        let crcPos = afterEt3.indexOf("6304");
+        et4 = crcPos !== -1 ? afterEt3.substring(0, crcPos) : afterEt3;
+
+    } 
+    // ==========================================
+    // 2) HIWALAY NA PATAKARAN PARA SA CIMB / GSAVE
+    // ==========================================
+    else if (textToParse.includes("cimb") || textToParse.includes("GSave") || textToParse.includes("ins.p2p") || textToParse.includes("CIPHPHMMXXX")) {
+        bankMode = "CIMB";
+        bankDisplay.innerHTML = '<span class="bank-badge" style="background-color: #de1f26;">⚡ CIMB Bank / GSave Account (No Decimal Format)</span>';
+
+        let tagRouteIndex = remaining.indexOf("GSave") !== -1 ? remaining.indexOf("GSave") : (remaining.indexOf("0410") !== -1 ? remaining.indexOf("0410") : 30);
+        et2 = remaining.substring(0, tagRouteIndex);
+        let afterEt2 = remaining.substring(tagRouteIndex);
+        
+        let nextTagIndex = afterEt2.indexOf("5204");
+        if (nextTagIndex === -1) nextTagIndex = 20;
+
+        et3 = afterEt2.substring(0, nextTagIndex);
+        let afterEt3 = afterEt2.substring(nextTagIndex);
+        
+        let crcPos = afterEt3.indexOf("6304");
+        et4 = crcPos !== -1 ? afterEt3.substring(0, crcPos) : afterEt3;
+
+    } 
+    // ==========================================
+    // 3) HIWALAY NA PATAKARAN PARA SA GCASH (DEFAULT)
+    // ==========================================
+    else {
+        bankMode = "GCASH";
+        bankDisplay.innerHTML = '<span class="bank-badge" style="background-color: #0056ef;">⚡ GCash P2P Account (Decimal Format)</span>';
+
+        let tag03Index = remaining.indexOf("0315");
+        if (tag03Index === -1) tag03Index = 0;
+
+        et2 = remaining.substring(0, tag03Index + 4);
+        let afterEt2 = remaining.substring(tag03Index + 4);
+        et3 = afterEt2.substring(0, 15);
+        let afterEt3 = afterEt2.substring(15);
+        
+        let crcPos = afterEt3.indexOf("6304");
+        et4 = crcPos !== -1 ? afterEt3.substring(0, crcPos) : afterEt3;
     }
 
-    // Paghahati batay sa gitnang istruktura ng account payload patungo sa dulo bago mag-CRC
-    staticBaseBeforeAmount = headerSegment;
-    staticBaseAfterAmount = cleanPayload.substring(12, crcIndex);
+    // I-save sa global parsed parts
+    parsedParts.et1 = et1;
+    parsedParts.et2 = et2;
+    parsedParts.et3 = et3;
+    parsedParts.et4 = et4;
 
-    // Kuhanin ang umiiral na halaga kung mayroon sa orihinal na payload
+    // Basahin ang umiiral na amount o maglagay ng default
+    const tag54Check = payload.indexOf("54");
     if (tag54Check !== -1) {
         const currentLen = parseInt(payload.substring(tag54Check + 2, tag54Check + 4), 10);
         const currentAmountVal = payload.substring(tag54Check + 4, tag54Check + 4 + currentLen);
@@ -185,7 +242,7 @@ function handleAmountChange() {
 }
 
 function rebuildQRPhPayload(immediate = false) {
-    if (!staticBaseBeforeAmount) return;
+    if (!parsedParts.et1) return;
 
     let amountInput = document.getElementById('amountInput').value.replace(/[^0-9.]/g, '');
     if (!amountInput || parseFloat(amountInput) <= 0) {
@@ -195,18 +252,35 @@ function rebuildQRPhPayload(immediate = false) {
 
     let formattedAmount = "";
     if (bankMode === "CIMB") {
-        // CIMB Rule: Walang decimal / integer lamang
+        // CIMB Rule: Walang decimal / buong numero lamang
         formattedAmount = Math.round(parseFloat(amountInput)).toString();
     } else {
-        // Maya at Standard GCash / QRPh Rule: May dalawang decimal places (.00)
+        // Maya at GCash Rule: May dalawang decimal places (.00)
         formattedAmount = parseFloat(amountInput).toFixed(2);
     }
 
     const amountLength = formattedAmount.length.toString().padStart(2, '0');
     const newTag54Segment = "54" + amountLength + formattedAmount;
 
-    // Pagbuo ng buong payload string bago lagyan ng CRC checksum
-    const assembledPayloadWithoutCRC = staticBaseBeforeAmount + staticBaseAfterAmount + newTag54Segment + "6304";
+    // Linisin ang et4 mula sa anumang lumang tag 54 para hindi mag-overlap
+    let cleanEt4 = parsedParts.et4.replace(/54\d{2}\d+(\.\d{2})?/g, "");
+    let et4Adjusted = cleanEt4;
+
+    // Ipasok ang bagong Tag 54 sa tamang pwesto (bago mag-currency o bago mag-5802PH)
+    let currencyIndex = cleanEt4.indexOf("5303608");
+    if (currencyIndex !== -1) {
+        et4Adjusted = cleanEt4.substring(0, currencyIndex) + newTag54Segment + cleanEt4.substring(currencyIndex);
+    } else {
+        let tag58Index = cleanEt4.indexOf("5802PH");
+        if (tag58Index !== -1) {
+            et4Adjusted = cleanEt4.substring(0, tag58Index) + newTag54Segment + cleanEt4.substring(tag58Index);
+        } else {
+            et4Adjusted = cleanEt4 + newTag54Segment;
+        }
+    }
+
+    // Buuin ang string nang walang CRC sa dulo
+    const assembledPayloadWithoutCRC = parsedParts.et1 + parsedParts.et2 + parsedParts.et3 + et4Adjusted + "6304";
     const finalCRC = calculateCRC16(assembledPayloadWithoutCRC);
     
     const completeQRString = assembledPayloadWithoutCRC + finalCRC;
