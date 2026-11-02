@@ -127,9 +127,11 @@ function analyzeAndSplitPayload(payload) {
     const bankDisplay = document.getElementById('detectedBank');
     let textToParse = payload;
     
-    // Malinis na pag-alis ng lumang Tag 54 kung nagtataglay ito ng amount
-    if (textToParse.includes("54")) {
-        textToParse = textToParse.replace(/54\d{2}\d+(\.\d{2})?/, "");
+    // Eksaktong pag-alis ng Tag 54 hango sa FinalAllinOneQrcodeGen.html
+    if (textToParse.includes("540")) {
+        textToParse = textToParse.replace(/54\d{2}\d+\.\d{2}/, "");
+    } else if (textToParse.includes("54")) {
+        textToParse = textToParse.replace(/54\d{2}\d+/, "");
     }
 
     let et1 = textToParse.substring(0, 12);
@@ -142,7 +144,7 @@ function analyzeAndSplitPayload(payload) {
     let et2 = "", et3 = "", et4 = "";
 
     // ==========================================
-    // EKSAKTONG V1 ALL-IN-ONE LOGIC PARA SA PARSING
+    // EKSAKTONG V1 MAPPING MULA SA FinalAllinOneQrcodeGen.html
     // ==========================================
     if (textToParse.includes("@p2p.maya") || textToParse.includes("p.ppoc.p2p") || textToParse.includes("PAPHPHM1XXX")) {
         bankMode = "MAYA";
@@ -198,11 +200,10 @@ function analyzeAndSplitPayload(payload) {
     parsedParts.et3 = et3;
     parsedParts.et4 = et4;
 
-    // Default amount sa input box
     document.getElementById('amountInput').value = "50.00";
-
     rebuildQRPhPayload(true);
 }
+
 
 function handleAmountChange() {
     clearTimeout(qrTimer);
