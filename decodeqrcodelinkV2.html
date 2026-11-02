@@ -4,9 +4,9 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>QRPh Web POS Direct Decoder Tool + Multi-Bank Separated Logic</title>
-    <!-- E-wallet Qrcode compatible Gcash, Maya, CIMB jsQR Library CDN para sa Offline/Online Client-side Extraction -->
+    <!-- jsQR Library CDN para sa Offline/Online Client-side Extraction -->
     <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js"></script>
-    <!--  qrcode.js Library CDN para sa Dynamic QR Generation -->
+    <!-- qrcode.js Library CDN para sa Dynamic QR Generation -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
     <style>
         body { font-family: 'Segoe UI', Arial, sans-serif; background-color: #f4f6f9; margin: 0; padding: 20px; color: #333; }
@@ -33,7 +33,7 @@
     <!-- Link Input Element (Pasting the Google Direct Link) -->
     <div class="input-group">
         <label for="linkInput">Google Drive Direct Image Link:</label>
-        <input type="text" id="linkInput" placeholder="I-paste ang https://lh3.googleusercontent.com/d/..." value="https://lh3.googleusercontent.com/d/1FLiJuo3WTmFZjUckYB8tSjS52Eb18RWj">
+        <input type="text" id="linkInput" placeholder="I-paste ang https://lh3.googleusercontent.com/d/..." value="https://lh3.googleusercontent.com/d/16iB-VqmasoHJZ-MzA1rlqLTa6sjAyXwv">
     </div>
 
     <button onclick="decodeAndProcessLink()">Decode QR Link</button>
@@ -74,17 +74,16 @@
 </div>
 
 <script>
-// Global variables para sa hiwalay na parsing istruktura
 let originalPayload = "";
 let bankMode = "GCASH"; // GCASH, MAYA, o CIMB
 let qrTimer = null;
 
-// Hiwalay na structural parts para sa bawat bangko
+// Hiwalay na structural parts hango sa iyong V1 All-in-One logic
 let parsedParts = {
-    et1: "", // Header (000201010212...)
-    et2: "", // Merchant info base
-    et3: "", // Phone / Routing / Alias Token
-    et4: ""  // Identity tokens, name, city, at iba pa bago mag-CRC
+    et1: "", 
+    et2: "", 
+    et3: "", 
+    et4: ""  
 };
 
 function decodeAndProcessLink() {
@@ -127,19 +126,14 @@ function decodeAndProcessLink() {
 
 function analyzeAndSplitPayload(payload) {
     const bankDisplay = document.getElementById('detectedBank');
-    
-    // Linisin muna ang lumang Tag 54 (Amount) kung meron man sa raw string para hindi sumama sa parsing
     let textToParse = payload;
+    
+    // Linisin muna ang umiiral na Tag 54 kung meron man
     if (textToParse.includes("54")) {
         textToParse = textToParse.replace(/54\d{2}\d+(\.\d{2})?/, "");
     }
 
     let et1 = textToParse.substring(0, 12);
-    // Palitan agad ang static header (0211) patungong dynamic (0212)
-    if(et1.startsWith("000201010211")) {
-        et1 = "000201010212" + et1.substring(12);
-    }
-    
     let remaining = textToParse.substring(12);
     let crcIndex = textToParse.indexOf("6304");
     if (crcIndex === -1) {
@@ -149,7 +143,7 @@ function analyzeAndSplitPayload(payload) {
     let et2 = "", et3 = "", et4 = "";
 
     // ==========================================
-    // 1) HIWALAY NA PATAKARAN PARA SA MAYA
+    // 1) MAYA P2P QR PARSING (Hango sa V1 Tool)
     // ==========================================
     if (textToParse.includes("@p2p.maya") || textToParse.includes("p.ppoc.p2p") || textToParse.includes("PAPHPHM1XXX")) {
         bankMode = "MAYA";
@@ -172,7 +166,7 @@ function analyzeAndSplitPayload(payload) {
 
     } 
     // ==========================================
-    // 2) HIWALAY NA PATAKARAN PARA SA CIMB / GSAVE
+    // 2) CIMB / GSAVE QR PARSING
     // ==========================================
     else if (textToParse.includes("cimb") || textToParse.includes("GSave") || textToParse.includes("ins.p2p") || textToParse.includes("CIPHPHMMXXX")) {
         bankMode = "CIMB";
@@ -193,7 +187,7 @@ function analyzeAndSplitPayload(payload) {
 
     } 
     // ==========================================
-    // 3) HIWALAY NA PATAKARAN PARA SA GCASH (DEFAULT)
+    // 3) GCASH P2P QR PARSING (DEFAULT)
     // ==========================================
     else {
         bankMode = "GCASH";
@@ -211,7 +205,11 @@ function analyzeAndSplitPayload(payload) {
         et4 = crcPos !== -1 ? afterEt3.substring(0, crcPos) : afterEt3;
     }
 
-    // I-save sa global parsed parts
+    // Isalin ang header format mula static (0211) patungong dynamic (0212)
+    if(et1.startsWith("000201010211")) {
+        et1 = "000201010212" + et1.substring(12);
+    }
+
     parsedParts.et1 = et1;
     parsedParts.et2 = et2;
     parsedParts.et3 = et3;
@@ -252,21 +250,19 @@ function rebuildQRPhPayload(immediate = false) {
 
     let formattedAmount = "";
     if (bankMode === "CIMB") {
-        // CIMB Rule: Walang decimal / buong numero lamang
         formattedAmount = Math.round(parseFloat(amountInput)).toString();
     } else {
-        // Maya at GCash Rule: May dalawang decimal places (.00)
         formattedAmount = parseFloat(amountInput).toFixed(2);
     }
 
     const amountLength = formattedAmount.length.toString().padStart(2, '0');
     const newTag54Segment = "54" + amountLength + formattedAmount;
 
-    // Linisin ang et4 mula sa anumang lumang tag 54 para hindi mag-overlap
+    // Linisin ang et4 mula sa anumang lumang tag 54
     let cleanEt4 = parsedParts.et4.replace(/54\d{2}\d+(\.\d{2})?/g, "");
     let et4Adjusted = cleanEt4;
 
-    // Ipasok ang bagong Tag 54 sa tamang pwesto (bago mag-currency o bago mag-5802PH)
+    // Isama ang amount tag bago ang currency o bago ang 5802PH hango sa reference V1 logic
     let currencyIndex = cleanEt4.indexOf("5303608");
     if (currencyIndex !== -1) {
         et4Adjusted = cleanEt4.substring(0, currencyIndex) + newTag54Segment + cleanEt4.substring(currencyIndex);
@@ -279,12 +275,11 @@ function rebuildQRPhPayload(immediate = false) {
         }
     }
 
-    // Buuin ang string nang walang CRC sa dulo
-    const assembledPayloadWithoutCRC = parsedParts.et1 + parsedParts.et2 + parsedParts.et3 + et4Adjusted + "6304";
-    const finalCRC = calculateCRC16(assembledPayloadWithoutCRC);
-    
-    const completeQRString = assembledPayloadWithoutCRC + finalCRC;
-    document.getElementById('finalStringView').innerText = completeQRString;
+    const combinedStringWithoutCRC = parsedParts.et1 + parsedParts.et2 + parsedParts.et3 + et4Adjusted + "6304";
+    const calculatedCRC = calculateCRC16(combinedStringWithoutCRC);
+    const finalCompleteQRString = combinedStringWithoutCRC + calculatedCRC;
+
+    document.getElementById('finalStringView').innerText = finalCompleteQRString;
 
     if (immediate) {
         document.getElementById('timerStatus').innerText = "✅ QR Code handa na!";
