@@ -1,0 +1,262 @@
+<!DOCTYPE html>
+<html lang="tl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>QRPh Web POS Direct Decoder Tool + Maya & CIMB Support</title>
+    <!-- jsQR Library CDN para sa Offline/Online Client-side Extraction -->
+    <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js"></script>
+    <!-- qrcode.js Library CDN para sa Dynamic QR Generation -->
+  <!-- Qrcode compatible Gcash, CIMB, MAYA --->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+    <style>
+        body { font-family: 'Segoe UI', Arial, sans-serif; background-color: #f4f6f9; margin: 0; padding: 20px; color: #333; }
+        .pos-container { max-width: 650px; margin: 0 auto; background: white; padding: 25px; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); }
+        h2 { text-align: center; color: #0288d1; margin-top: 0; }
+        .input-group { margin-bottom: 15px; }
+        label { display: block; font-weight: bold; margin-bottom: 5px; color: #555; }
+        input[type="text"] { width: 100%; padding: 10px; border: 1px solid #ccc; border-radius: 6px; box-sizing: border-box; font-size: 14px; }
+        button { width: 100%; padding: 12px; border: none; background-color: #0288d1; color: white; font-weight: bold; font-size: 16px; border-radius: 6px; cursor: pointer; transition: background 0.2s; }
+        button:hover { background-color: #01579b; }
+        .view-box { background: #f1f8e9; border-left: 5px solid #7cb342; padding: 12px; border-radius: 4px; font-family: monospace; word-break: break-all; margin-top: 5px; font-size: 13px; }
+        .error { color: #d32f2f; background: #ffebee; border-left: 5px solid #d32f2f; padding: 10px; border-radius: 4px; display: none; margin-top: 10px; }
+        .bank-badge { display: inline-block; padding: 4px 8px; border-radius: 4px; font-size: 12px; font-weight: bold; color: white; margin-top: 5px; }
+        .qr-display-section { text-align: center; margin-top: 20px; background: #fafafa; padding: 15px; border-radius: 8px; border: 1px dashed #ccc; }
+        .qr-box { background: white; padding: 12px; border-radius: 8px; display: inline-block; margin-top: 10px; box-shadow: 0 2px 8px rgba(0,0,0,0.08); }
+        .timer-status { font-size: 12px; color: #d97706; font-style: italic; margin-top: 5px; }
+    </style>
+</head>
+<body>
+
+<div class="pos-container">
+    <h2>QRPh Web POS Direct Decoder Tool</h2>
+    
+    <!-- Link Input Element (Pasting the Google Direct Link) -->
+    <div class="input-group">
+        <label for="linkInput">Google Drive Direct Image Link:</label>
+        <input type="text" id="linkInput" placeholder="I-paste ang https://lh3.googleusercontent.com/d/..." value="https://lh3.googleusercontent.com/d/1FLiJuo3WTmFZjUckYB8tSjS52Eb18RWj">
+    </div>
+
+    <button onclick="decodeAndProcessLink()">Decode QR Link</button>
+    <div id="errorDisplay" class="error"></div>
+
+    <hr style="margin: 20px 0; border: 0; border-top: 1px solid #eee;">
+
+    <!-- 1) TextView Parts (Display Area) -->
+    <div class="input-group">
+        <label>Detected Provider Network:</label>
+        <div id="detectedBank" style="font-weight: bold; padding: 5px 0;">-- Naghihintay ng Scan --</div>
+    </div>
+
+    <div class="input-group">
+        <label>Original Decoded Raw String:</label>
+        <div id="rawStringView" class="view-box">-- Walang Data --</div>
+    </div>
+
+    <!-- 2) Edit Text Parts (Modifying the Amount) -->
+    <div class="input-group">
+        <label for="amountInput">Bagong Halaga / New Amount (PHP):</label>
+        <input type="text" id="amountInput" placeholder="Halimbawa: 150.00 o 50" oninput="handleAmountChange()">
+        <div id="timerStatus" class="timer-status"></div>
+    </div>
+
+    <div class="input-group">
+        <label>Updated Final QRPh Output String (Ready for POS):</label>
+        <div id="finalStringView" class="view-box" style="background: #e3f2fd; border-left-color: #2196f3;">-- Walang Data --</div>
+    </div>
+
+    <!-- 3) Dynamic QR Code Output Section -->
+    <div class="qr-display-section">
+        <label style="margin-bottom: 0;">Generated Dynamic QRPh Code:</label>
+        <div class="qr-box" id="qrcodeCanvas">
+            <span style="font-size: 12px; color: #888;">Mag-generate ang QR pagkatapos ng 5 segundong delay...</span>
+        </div>
+    </div>
+</div>
+
+<script>
+let originalPayload = "";
+let bankMode = "STANDARD"; // Maaaring maging MAYA, CIMB, o STANDARD
+let staticBaseBeforeAmount = "";
+let staticBaseAfterAmount = "";
+let qrTimer = null;
+
+function decodeAndProcessLink() {
+    const url = document.getElementById('linkInput').value.trim();
+    const errorBox = document.getElementById('errorDisplay');
+    errorBox.style.display = "none";
+    
+    if(!url) {
+        showError("Mangyaring mag-paste ng valid na link.");
+        return;
+    }
+
+    const img = new Image();
+    img.crossOrigin = "anonymous";
+    img.src = url;
+    
+    img.onload = function() {
+        const canvas = document.createElement('canvas');
+        const ctx = canvas.getContext('2d');
+        canvas.width = img.width;
+        canvas.height = img.height;
+        ctx.drawImage(img, 0, 0, img.width, img.height);
+        
+        const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+        const code = jsQR(imageData.data, imageData.width, imageData.height);
+        
+        if (code) {
+            originalPayload = code.data;
+            document.getElementById('rawStringView').innerText = originalPayload;
+            analyzeAndSplitPayload(originalPayload);
+        } else {
+            showError("Hindi mabasang maayos ang QR Code galing sa link. Siguraduhing ito ay malinaw na QRPh image.");
+        }
+    };
+
+    img.onerror = function() {
+        showError("Hindi ma-load ang imahe. Siguraduhing tama ang link at naka-set ito sa 'Anyone with the link' sa Google Drive.");
+    };
+}
+
+function analyzeAndSplitPayload(payload) {
+    const bankDisplay = document.getElementById('detectedBank');
+    
+    // Pagtukoy sa Network gamit ang logic mula sa V1 tool mo at CIMB/GCash rules
+    if (payload.includes("@p2p.maya") || payload.includes("p.ppoc.p2p")) {
+        bankMode = "MAYA";
+        bankDisplay.innerHTML = '<span class="bank-badge" style="background-color: #28a745;">Maya Universal QR (Decimal Format)</span>';
+    } else if (payload.includes("CIPHPHMMXXX") || payload.includes("cimb") || payload.includes("GSave")) {
+        bankMode = "CIMB";
+        bankDisplay.innerHTML = '<span class="bank-badge" style="background-color: #de1f26;">CIMB Bank Philippines (No Decimal Format)</span>';
+    } else if (payload.includes("G-Xchange") || payload.includes("com.p2pqrpay")) {
+        bankMode = "STANDARD";
+        bankDisplay.innerHTML = '<span class="bank-badge" style="background-color: #0056ef;">GCash / Standard QRPh (Decimal Format)</span>';
+    } else {
+        bankMode = "STANDARD";
+        bankDisplay.innerHTML = '<span class="bank-badge" style="background-color: #616161;">Universal QRPh Match</span>';
+    }
+
+    // Pansamantalang alisin ang lumang Tag 54 kung meron man para malinis ang paghati sa payload
+    let cleanPayload = payload;
+    const tag54Check = payload.indexOf("54");
+    if (tag54Check !== -1) {
+        const currentLen = parseInt(payload.substring(tag54Check + 2, tag54Check + 4), 10);
+        cleanPayload = payload.substring(0, tag54Check) + payload.substring(tag54Check + 4 + currentLen);
+    }
+
+    // Hanapin ang pwesto ng CRC entry sa dulo (karaniwang nagsisimula sa 6304)
+    let crcIndex = cleanPayload.indexOf("6304");
+    if (crcIndex === -1) {
+        crcIndex = cleanPayload.length - 4;
+    }
+
+    // I-isolate ang header segment at palitan ang static 0211 patungong dynamic 0212
+    let headerSegment = cleanPayload.substring(0, 12);
+    if(headerSegment.startsWith("000201010211")) {
+        headerSegment = "000201010212" + headerSegment.substring(12);
+    }
+
+    // Paghahati batay sa gitnang istruktura ng account payload patungo sa dulo bago mag-CRC
+    staticBaseBeforeAmount = headerSegment;
+    staticBaseAfterAmount = cleanPayload.substring(12, crcIndex);
+
+    // Kuhanin ang umiiral na halaga kung mayroon sa orihinal na payload
+    if (tag54Check !== -1) {
+        const currentLen = parseInt(payload.substring(tag54Check + 2, tag54Check + 4), 10);
+        const currentAmountVal = payload.substring(tag54Check + 4, tag54Check + 4 + currentLen);
+        document.getElementById('amountInput').value = parseFloat(currentAmountVal).toFixed(2);
+    } else {
+        document.getElementById('amountInput').value = "100.00";
+    }
+
+    rebuildQRPhPayload(true);
+}
+
+function handleAmountChange() {
+    clearTimeout(qrTimer);
+    document.getElementById('timerStatus').innerText = "⏳ Naghihintay matapos mag-type (5 segundong delay)...";
+    rebuildQRPhPayload(false);
+
+    qrTimer = setTimeout(() => {
+        document.getElementById('timerStatus').innerText = "✅ Bagong QR Code generated na!";
+        generatePhysicalQRCode();
+    }, 5000);
+}
+
+function rebuildQRPhPayload(immediate = false) {
+    if (!staticBaseBeforeAmount) return;
+
+    let amountInput = document.getElementById('amountInput').value.replace(/[^0-9.]/g, '');
+    if (!amountInput || parseFloat(amountInput) <= 0) {
+        document.getElementById('finalStringView').innerText = "Maglagay ng tamang halaga...";
+        return;
+    }
+
+    let formattedAmount = "";
+    if (bankMode === "CIMB") {
+        // CIMB Rule: Walang decimal / integer lamang
+        formattedAmount = Math.round(parseFloat(amountInput)).toString();
+    } else {
+        // Maya at Standard GCash / QRPh Rule: May dalawang decimal places (.00)
+        formattedAmount = parseFloat(amountInput).toFixed(2);
+    }
+
+    const amountLength = formattedAmount.length.toString().padStart(2, '0');
+    const newTag54Segment = "54" + amountLength + formattedAmount;
+
+    // Pagbuo ng buong payload string bago lagyan ng CRC checksum
+    const assembledPayloadWithoutCRC = staticBaseBeforeAmount + staticBaseAfterAmount + newTag54Segment + "6304";
+    const finalCRC = calculateCRC16(assembledPayloadWithoutCRC);
+    
+    const completeQRString = assembledPayloadWithoutCRC + finalCRC;
+    document.getElementById('finalStringView').innerText = completeQRString;
+
+    if (immediate) {
+        document.getElementById('timerStatus').innerText = "✅ QR Code handa na!";
+        generatePhysicalQRCode();
+    }
+}
+
+function generatePhysicalQRCode() {
+    const finalString = document.getElementById('finalStringView').innerText;
+    const qrContainer = document.getElementById('qrcodeCanvas');
+    
+    if (!finalString || finalString.includes("Maglagay ng tamang halaga") || finalString.includes("-- Walang Data --")) {
+        return;
+    }
+
+    qrContainer.innerHTML = "";
+    
+    new QRCode(qrContainer, {
+        text: finalString,
+        width: 180,
+        height: 180,
+        correctLevel: QRCode.CorrectLevel.H
+    });
+}
+
+function calculateCRC16(str) {
+    let crc = 0xFFFF;
+    for (let c = 0; c < str.length; c++) {
+        crc ^= str.charCodeAt(c) << 8;
+        for (let i = 0; i < 8; i++) {
+            if (crc & 0x8000) {
+                crc = (crc << 1) ^ 0x1021;
+            } else {
+                crc = crc << 1;
+            }
+        }
+    }
+    return (crc & 0xFFFF).toString(16).toUpperCase().padStart(4, '0');
+}
+
+function showError(msg) {
+    const errorBox = document.getElementById('errorDisplay');
+    errorBox.innerText = msg;
+    errorBox.style.display = "block";
+}
+</script>
+
+</body>
+</html>
