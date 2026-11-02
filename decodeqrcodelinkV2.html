@@ -128,7 +128,7 @@ function analyzeAndSplitPayload(payload) {
     let textToParse = payload;
     
     // Malinis na pag-alis ng lumang Tag 54 kung nagtataglay ito ng amount
-    if (textToParse.includes("540") || textToParse.includes("54")) {
+    if (textToParse.includes("54")) {
         textToParse = textToParse.replace(/54\d{2}\d+(\.\d{2})?/, "");
     }
 
@@ -142,7 +142,7 @@ function analyzeAndSplitPayload(payload) {
     let et2 = "", et3 = "", et4 = "";
 
     // ==========================================
-    // MGA PATAKARAN HANGO SA V1 ALL-IN-ONE TOOL
+    // EKSAKTONG V1 ALL-IN-ONE LOGIC PARA SA PARSING
     // ==========================================
     if (textToParse.includes("@p2p.maya") || textToParse.includes("p.ppoc.p2p") || textToParse.includes("PAPHPHM1XXX")) {
         bankMode = "MAYA";
@@ -198,8 +198,8 @@ function analyzeAndSplitPayload(payload) {
     parsedParts.et3 = et3;
     parsedParts.et4 = et4;
 
-    // Maglagay ng default safe amount sa input box pagka-decode
-    document.getElementById('amountInput').value = "100.00";
+    // Default amount sa input box
+    document.getElementById('amountInput').value = "50.00";
 
     rebuildQRPhPayload(true);
 }
@@ -228,7 +228,7 @@ function rebuildQRPhPayload(immediate = false) {
 
     let hasAmount = parseFloat(amountInput) > 0;
     
-    // Baguhin ang header format: 0211 kapag walang amount, 0212 kapag may dynamic amount
+    // Dynamic Header Switch (0211 kapag walang amount, 0212 kapag may dynamic amount)
     if (hasAmount) {
         et1 = et1.substring(0, 10) + "12";
     } else {
@@ -245,11 +245,11 @@ function rebuildQRPhPayload(immediate = false) {
     const tagLength = formattedAmount.length.toString().padStart(2, '0');
     const amountTag = "54" + tagLength + formattedAmount;
 
-    // Linisin muna ang et4 mula sa lumang tag 54 kung meron man
+    // Linisin ang et4 mula sa lumang tag 54 kung meron man
     let cleanEt4 = parsedParts.et4.replace(/54\d{2}\d+(\.\d{2})?/g, "");
     let et4Adjusted = cleanEt4;
 
-    // Eksaktong V1 logic sa pag-insister ng amount tag bago ang currency (5303608) o 5802PH
+    // Eksaktong V1 logic sa paglalagay ng amount tag bago ang currency (5303608) o 5802PH
     let currencyIndex = cleanEt4.indexOf("5303608");
     if (currencyIndex !== -1) {
         et4Adjusted = cleanEt4.substring(0, currencyIndex) + amountTag + cleanEt4.substring(currencyIndex);
