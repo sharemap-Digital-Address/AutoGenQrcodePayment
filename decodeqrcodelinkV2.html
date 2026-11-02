@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>QRPh Web POS Direct Decoder Tool + Multi-Bank Separated Logic</title>
+    <title>QRPh Web POS Direct Decoder Tool + Exact V1 Maya Fix</title>
     <!-- jsQR Library CDN para sa Offline/Online Client-side Extraction -->
     <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js"></script>
     <!-- qrcode.js Library CDN para sa Dynamic QR Generation -->
@@ -78,7 +78,6 @@ let originalPayload = "";
 let bankMode = "GCASH"; // GCASH, MAYA, o CIMB
 let qrTimer = null;
 
-// Hiwalay na structural parts hango sa iyong V1 All-in-One logic
 let parsedParts = {
     et1: "", 
     et2: "", 
@@ -128,8 +127,8 @@ function analyzeAndSplitPayload(payload) {
     const bankDisplay = document.getElementById('detectedBank');
     let textToParse = payload;
     
-    // Linisin muna ang umiiral na Tag 54 kung meron man
-    if (textToParse.includes("54")) {
+    // Malinis na pag-alis ng lumang Tag 54 kung nagtataglay ito ng amount
+    if (textToParse.includes("540") || textToParse.includes("54")) {
         textToParse = textToParse.replace(/54\d{2}\d+(\.\d{2})?/, "");
     }
 
@@ -143,7 +142,7 @@ function analyzeAndSplitPayload(payload) {
     let et2 = "", et3 = "", et4 = "";
 
     // ==========================================
-    // 1) MAYA P2P QR PARSING (Hango sa V1 Tool)
+    // MGA PATAKARAN HANGO SA V1 ALL-IN-ONE TOOL
     // ==========================================
     if (textToParse.includes("@p2p.maya") || textToParse.includes("p.ppoc.p2p") || textToParse.includes("PAPHPHM1XXX")) {
         bankMode = "MAYA";
@@ -161,14 +160,9 @@ function analyzeAndSplitPayload(payload) {
         et3 = afterEt2.substring(0, nextBlockIndex);
         let afterEt3 = afterEt2.substring(nextBlockIndex);
         
-        let crcPos = afterEt3.indexOf("6304");
-        et4 = crcPos !== -1 ? afterEt3.substring(0, crcPos) : afterEt3;
+        et4 = afterEt3.substring(0, afterEt3.indexOf("6304"));
 
-    } 
-    // ==========================================
-    // 2) CIMB / GSAVE QR PARSING
-    // ==========================================
-    else if (textToParse.includes("cimb") || textToParse.includes("GSave") || textToParse.includes("ins.p2p") || textToParse.includes("CIPHPHMMXXX")) {
+    } else if (textToParse.includes("cimb") || textToParse.includes("GSave") || textToParse.includes("ins.p2p") || textToParse.includes("CIPHPHMMXXX")) {
         bankMode = "CIMB";
         bankDisplay.innerHTML = '<span class="bank-badge" style="background-color: #de1f26;">⚡ CIMB Bank / GSave Account (No Decimal Format)</span>';
 
@@ -182,14 +176,9 @@ function analyzeAndSplitPayload(payload) {
         et3 = afterEt2.substring(0, nextTagIndex);
         let afterEt3 = afterEt2.substring(nextTagIndex);
         
-        let crcPos = afterEt3.indexOf("6304");
-        et4 = crcPos !== -1 ? afterEt3.substring(0, crcPos) : afterEt3;
+        et4 = afterEt3.substring(0, afterEt3.indexOf("6304"));
 
-    } 
-    // ==========================================
-    // 3) GCASH P2P QR PARSING (DEFAULT)
-    // ==========================================
-    else {
+    } else {
         bankMode = "GCASH";
         bankDisplay.innerHTML = '<span class="bank-badge" style="background-color: #0056ef;">⚡ GCash P2P Account (Decimal Format)</span>';
 
@@ -201,13 +190,7 @@ function analyzeAndSplitPayload(payload) {
         et3 = afterEt2.substring(0, 15);
         let afterEt3 = afterEt2.substring(15);
         
-        let crcPos = afterEt3.indexOf("6304");
-        et4 = crcPos !== -1 ? afterEt3.substring(0, crcPos) : afterEt3;
-    }
-
-    // Isalin ang header format mula static (0211) patungong dynamic (0212)
-    if(et1.startsWith("000201010211")) {
-        et1 = "000201010212" + et1.substring(12);
+        et4 = afterEt3.substring(0, afterEt3.indexOf("6304"));
     }
 
     parsedParts.et1 = et1;
@@ -215,15 +198,8 @@ function analyzeAndSplitPayload(payload) {
     parsedParts.et3 = et3;
     parsedParts.et4 = et4;
 
-    // Basahin ang umiiral na amount o maglagay ng default
-    const tag54Check = payload.indexOf("54");
-    if (tag54Check !== -1) {
-        const currentLen = parseInt(payload.substring(tag54Check + 2, tag54Check + 4), 10);
-        const currentAmountVal = payload.substring(tag54Check + 4, tag54Check + 4 + currentLen);
-        document.getElementById('amountInput').value = parseFloat(currentAmountVal).toFixed(2);
-    } else {
-        document.getElementById('amountInput').value = "100.00";
-    }
+    // Maglagay ng default safe amount sa input box pagka-decode
+    document.getElementById('amountInput').value = "100.00";
 
     rebuildQRPhPayload(true);
 }
@@ -242,10 +218,21 @@ function handleAmountChange() {
 function rebuildQRPhPayload(immediate = false) {
     if (!parsedParts.et1) return;
 
+    let et1 = parsedParts.et1;
     let amountInput = document.getElementById('amountInput').value.replace(/[^0-9.]/g, '');
+    
     if (!amountInput || parseFloat(amountInput) <= 0) {
         document.getElementById('finalStringView').innerText = "Maglagay ng tamang halaga...";
         return;
+    }
+
+    let hasAmount = parseFloat(amountInput) > 0;
+    
+    // Baguhin ang header format: 0211 kapag walang amount, 0212 kapag may dynamic amount
+    if (hasAmount) {
+        et1 = et1.substring(0, 10) + "12";
+    } else {
+        et1 = et1.substring(0, 10) + "11";
     }
 
     let formattedAmount = "";
@@ -255,27 +242,27 @@ function rebuildQRPhPayload(immediate = false) {
         formattedAmount = parseFloat(amountInput).toFixed(2);
     }
 
-    const amountLength = formattedAmount.length.toString().padStart(2, '0');
-    const newTag54Segment = "54" + amountLength + formattedAmount;
+    const tagLength = formattedAmount.length.toString().padStart(2, '0');
+    const amountTag = "54" + tagLength + formattedAmount;
 
-    // Linisin ang et4 mula sa anumang lumang tag 54
+    // Linisin muna ang et4 mula sa lumang tag 54 kung meron man
     let cleanEt4 = parsedParts.et4.replace(/54\d{2}\d+(\.\d{2})?/g, "");
     let et4Adjusted = cleanEt4;
 
-    // Isama ang amount tag bago ang currency o bago ang 5802PH hango sa reference V1 logic
+    // Eksaktong V1 logic sa pag-insister ng amount tag bago ang currency (5303608) o 5802PH
     let currencyIndex = cleanEt4.indexOf("5303608");
     if (currencyIndex !== -1) {
-        et4Adjusted = cleanEt4.substring(0, currencyIndex) + newTag54Segment + cleanEt4.substring(currencyIndex);
+        et4Adjusted = cleanEt4.substring(0, currencyIndex) + amountTag + cleanEt4.substring(currencyIndex);
     } else {
         let tag58Index = cleanEt4.indexOf("5802PH");
         if (tag58Index !== -1) {
-            et4Adjusted = cleanEt4.substring(0, tag58Index) + newTag54Segment + cleanEt4.substring(tag58Index);
+            et4Adjusted = cleanEt4.substring(0, tag58Index) + amountTag + cleanEt4.substring(tag58Index);
         } else {
-            et4Adjusted = cleanEt4 + newTag54Segment;
+            et4Adjusted = cleanEt4 + amountTag;
         }
     }
 
-    const combinedStringWithoutCRC = parsedParts.et1 + parsedParts.et2 + parsedParts.et3 + et4Adjusted + "6304";
+    const combinedStringWithoutCRC = et1 + parsedParts.et2 + parsedParts.et3 + et4Adjusted + "6304";
     const calculatedCRC = calculateCRC16(combinedStringWithoutCRC);
     const finalCompleteQRString = combinedStringWithoutCRC + calculatedCRC;
 
